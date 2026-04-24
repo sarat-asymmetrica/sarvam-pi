@@ -125,7 +125,13 @@ function buildToolProtocolPrompt(tools?: Tool[]): string {
 function buildMessages(context: Context, options: MessageBuildOptions = {}): any[] {
 	const messages: any[] = [];
 	const toolProtocolPrompt = options.flattenToolHistory
-		? "Tool use is now closed for this turn. Synthesize the final answer from the tool results already provided. Do not request or mention another tool call."
+		? [
+				"Tool use is now closed for this turn.",
+				"Synthesize the final answer from the tool results already provided.",
+				"Do not request, mention, or emit another tool call.",
+				"Do not output XML-like tool text such as <tool_call>.",
+				"Do not output tool names as standalone text.",
+			].join("\n")
 		: buildToolProtocolPrompt(context.tools);
 	const systemPrompt = [context.systemPrompt, toolProtocolPrompt].filter((part) => part?.trim()).join("\n\n");
 	if (systemPrompt.trim()) {
@@ -211,6 +217,66 @@ function isUnknownToolCall(toolCall: ToolCall, tools?: Tool[]): boolean {
 		return false;
 	}
 	return !tools.some((tool) => tool.name === toolCall.name);
+}
+
+async function requestSarvam(
+	model: Model<any>,
+	subscriptionKey: string,
+	body: Record<string, unknown>,
+	signal?: AbortSignal,
+): Promise<any> {
+	const response = await fetch(`${model.baseUrl}/chat/completions`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"api-subscription-key": subscriptionKey,
+		},
+		body: JSON.stringify(body),
+		signal,
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Sarvam request failed with HTTP ${response.status}: ${errorText}`);
+	}
+
+	return response.json();
+}
+
+function getPayloadText(payload: any): string {
+	return (
+		payload.choices?.[0]?.message?.content ??
+		payload.choices?.[0]?.message?.reasoning_content ??
+		payload.output_text ??
+		""
+	);
+}
+
+async function retrySynthesis(
+	model: Model<any>,
+	subscriptionKey: string,
+	context: Context,
+	maxTokens: number,
+	signal?: AbortSignal,
+): Promise<any> {
+	return requestSarvam(
+		model,
+		subscriptionKey,
+		{
+			model: model.id,
+			messages: [
+				...buildMessages(context, { flattenToolHistory: true }),
+				{
+					role: "user",
+					content:
+						"Answer now using only the tool results already included above. Do not call tools. Do not output tool-call syntax. Provide the final explanation directly.",
+				},
+			],
+			max_tokens: maxTokens,
+			stream: false,
+		},
+		signal,
+	);
 }
 
 function normalizeToolArguments(toolName: string, args: Record<string, any>): Record<string, any> {
@@ -336,41 +402,52 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 			stream.push({ type: "start", partial: output });
 			const forceSynthesis = shouldForceSynthesis(context);
 
-			const response = await fetch(`${model.baseUrl}/chat/completions`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"api-subscription-key": subscriptionKey,
-				},
-				body: JSON.stringify({
+			let payload = await requestSarvam(
+				model,
+				subscriptionKey,
+				{
 					model: model.id,
 					messages: buildMessages(context, { flattenToolHistory: forceSynthesis }),
 					tools: forceSynthesis ? undefined : buildTools(context.tools),
 					tool_choice: forceSynthesis ? undefined : "auto",
 					max_tokens: options?.maxTokens ?? model.maxTokens,
 					stream: false,
-				}),
-				signal: options?.signal,
-			});
+				},
+				options?.signal,
+			);
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error(`Sarvam request failed with HTTP ${response.status}: ${errorText}`);
-			}
-
-			const payload = (await response.json()) as any;
-			const text =
-				payload.choices?.[0]?.message?.content ??
-				payload.choices?.[0]?.message?.reasoning_content ??
-				payload.output_text ??
-				"";
+			let text = getPayloadText(payload);
 
 			const toolCall = parseNativeToolCall(payload) ?? parseSarvamToolCall(text);
 			if (toolCall) {
-				if (forceSynthesis || isUnknownToolCall(toolCall, context.tools)) {
-					throw new Error(
-						`Sarvam returned tool call "${toolCall.name}" when synthesis was required or the tool was unavailable. Restart the turn or ask Sarvam to answer from the tool results already shown.`,
+				if (forceSynthesis) {
+					payload = await retrySynthesis(
+						model,
+						subscriptionKey,
+						context,
+						options?.maxTokens ?? model.maxTokens,
+						options?.signal,
 					);
+					text = getPayloadText(payload);
+					const retryToolCall = parseNativeToolCall(payload) ?? parseSarvamToolCall(text);
+					if (!retryToolCall && text.trim()) {
+						output.content.push({ type: "text", text });
+						output.usage.input = payload.usage?.prompt_tokens ?? 0;
+						output.usage.output = payload.usage?.completion_tokens ?? 0;
+						output.usage.totalTokens = payload.usage?.total_tokens ?? output.usage.input + output.usage.output;
+						stream.push({ type: "text_start", contentIndex: 0, partial: output });
+						stream.push({ type: "text_delta", contentIndex: 0, delta: text, partial: output });
+						stream.push({ type: "text_end", contentIndex: 0, content: text, partial: output });
+						stream.push({ type: "done", reason: "stop", message: output });
+						stream.end();
+						return;
+					}
+					throw new Error(
+						`Sarvam kept returning tool call "${retryToolCall?.name ?? toolCall.name}" after synthesis retry. Ask it to answer from the visible tool results.`,
+					);
+				}
+				if (isUnknownToolCall(toolCall, context.tools)) {
+					throw new Error(`Sarvam returned unavailable tool call "${toolCall.name}". Available tools: ${context.tools?.map((tool) => tool.name).join(", ") ?? "none"}.`);
 				}
 				output.content.push(toolCall);
 				output.stopReason = "toolUse";

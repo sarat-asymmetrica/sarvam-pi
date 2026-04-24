@@ -94,6 +94,8 @@ This keeps multi-file inspection possible while preventing runaway rereads. Once
 
 If Sarvam still returns an unavailable tool name such as `tool` or `tool_name`, the provider raises a visible protocol error instead of executing a bogus call.
 
+If Sarvam returns another valid-looking tool call after tool use has been closed, the provider performs one synthesis retry with no tools and an explicit final-answer instruction. If Sarvam still asks for a tool after that retry, the provider surfaces a protocol error.
+
 ## Diagnostics
 
 The provider should fail loudly when:
