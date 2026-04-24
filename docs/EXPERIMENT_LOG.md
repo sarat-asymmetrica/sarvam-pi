@@ -42,6 +42,7 @@ Observed first tool-loop mismatch:
 - RLM smoke passed after the guard adjustment. Sarvam created session `0c3ef84a-6c54-4c4a-8320-1dd1632fae37`, appended trajectory, wrote and read context, wrote compaction, appended a planned `scout` child call using `sarvam/sarvam-105b`, and synthesized the final state summary.
 - First subagent smoke launched `sarvam_subagent` but the child timed out after 120 seconds. Patched the subagent wrapper to use `--no-session --print`, ignore stdin, use a stricter child protocol, default to 240 seconds, and return partial output on timeout.
 - Subagent smoke passed after hardening. Root Sarvam created session `d85302ab-9c37-487d-8b91-1bdc2ed4c457`, launched a Sarvam 105B `scout` child process, received a provider responsibility summary, and recorded running/completed child-call records in RLM state.
+- Reviewer subagent smoke passed and flagged real follow-up risks. The missing `package.json` finding is a known outer-repo type-check limitation rather than a runtime failure, but the path traversal concern was valid; mutation scope checks now compare absolute resolved paths. Worker subagent smoke passed by appending `Worker subagent smoke passed.` to the disposable fixture and verifying the readback.
 
 Next step:
 

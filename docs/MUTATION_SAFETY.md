@@ -59,6 +59,8 @@ The provider blocks mutation calls to:
 - paths containing `credential`
 - paths outside the current mutation root, unless explicitly overridden
 
+The scope check resolves both the requested mutation path and the allowed root to absolute paths before comparison. This is intended to block `../` traversal and accidental absolute-path escapes.
+
 ## Smoke Prompt
 
 ```text

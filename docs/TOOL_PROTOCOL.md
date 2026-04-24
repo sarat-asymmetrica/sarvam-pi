@@ -84,7 +84,7 @@ By default, `edit` and `write` are only allowed under:
 experiments/002-tool-loop-smoke/fixture/
 ```
 
-The provider also blocks mutation paths involving `pi-mono/`, env files, secrets, or credentials. Later controlled tests can set `SARVAM_PI_MUTATION_ROOT` to a different write scope or `SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1` to disable the scope guard.
+The provider also blocks mutation paths involving `pi-mono/`, env files, secrets, or credentials. Scope checks compare absolute resolved paths to prevent `../` traversal. Later controlled tests can set `SARVAM_PI_MUTATION_ROOT` to a different write scope or `SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1` to disable the scope guard.
 
 ## Request Rules
 

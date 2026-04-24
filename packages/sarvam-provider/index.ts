@@ -9,6 +9,7 @@ import {
 	type Tool,
 	type ToolCall,
 } from "@mariozechner/pi-ai";
+import { isAbsolute, resolve } from "node:path";
 
 const SARVAM_BASE_URL = process.env.SARVAM_BASE_URL ?? "https://api.sarvam.ai/v1";
 const SARVAM_API_KEY =
@@ -374,7 +375,12 @@ function normalizeToolArguments(toolName: string, args: Record<string, any>): Re
 }
 
 function normalizePathForPolicy(path: string): string {
-	return path.replace(/\\/g, "/").replace(/^\.\//, "");
+	return path.replace(/\\/g, "/").replace(/^\/+/, "/");
+}
+
+function absolutePolicyPath(path: string): string {
+	const resolved = isAbsolute(path) ? resolve(path) : resolve(process.cwd(), path);
+	return normalizePathForPolicy(resolved);
 }
 
 function mutationRoot(): string {
@@ -414,7 +420,10 @@ function validateToolCall(toolCall: ToolCall): void {
 	}
 
 	const root = mutationRoot();
-	if (!normalized.startsWith(root)) {
+	const absolutePath = absolutePolicyPath(path);
+	const absoluteRoot = absolutePolicyPath(root);
+	const isInsideRoot = absolutePath === absoluteRoot || absolutePath.startsWith(`${absoluteRoot}/`);
+	if (!isInsideRoot) {
 		throw new Error(
 			`Blocked mutation path "${path}". Current mutation scope is "${root}". Set SARVAM_PI_MUTATION_ROOT to change the scope or SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1 to disable this guard.`,
 		);
