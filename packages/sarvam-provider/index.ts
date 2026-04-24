@@ -252,6 +252,55 @@ function getPayloadText(payload: any): string {
 	);
 }
 
+function lastUserPrompt(context: Context): string {
+	for (let i = context.messages.length - 1; i >= 0; i--) {
+		const message = context.messages[i];
+		if (message.role === "user") {
+			return textFromContent(message.content);
+		}
+	}
+	return "";
+}
+
+function toolResultDigest(context: Context): string {
+	const results: string[] = [];
+	for (const message of context.messages) {
+		if (message.role !== "toolResult") {
+			continue;
+		}
+		const content = textFromContent(message.content).trim();
+		if (content) {
+			results.push(`Result ${results.length + 1}:\n${content}`);
+		}
+	}
+	return results.join("\n\n");
+}
+
+function buildCleanSynthesisMessages(context: Context): any[] {
+	const prompt = lastUserPrompt(context);
+	const digest = toolResultDigest(context);
+	return [
+		{
+			role: "system",
+			content: [
+				"You are Sarvam in final-answer mode.",
+				"No tools are available.",
+				"Do not emit tool names, JSON tool calls, XML tool calls, or tool-call syntax.",
+				"Use only the provided retrieved content to answer the user's request directly.",
+			].join("\n"),
+		},
+		{
+			role: "user",
+			content: [
+				`User request:\n${prompt}`,
+				"Retrieved content:",
+				digest || "(No retrieved content was provided.)",
+				"Now provide the final answer directly in prose.",
+			].join("\n\n"),
+		},
+	];
+}
+
 async function retrySynthesis(
 	model: Model<any>,
 	subscriptionKey: string,
@@ -264,14 +313,7 @@ async function retrySynthesis(
 		subscriptionKey,
 		{
 			model: model.id,
-			messages: [
-				...buildMessages(context, { flattenToolHistory: true }),
-				{
-					role: "user",
-					content:
-						"Answer now using only the tool results already included above. Do not call tools. Do not output tool-call syntax. Provide the final explanation directly.",
-				},
-			],
+			messages: buildCleanSynthesisMessages(context),
 			max_tokens: maxTokens,
 			stream: false,
 		},
@@ -442,9 +484,19 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 						stream.end();
 						return;
 					}
-					throw new Error(
-						`Sarvam kept returning tool call "${retryToolCall?.name ?? toolCall.name}" after synthesis retry. Ask it to answer from the visible tool results.`,
-					);
+					const fallbackText = [
+						"Sarvam gathered the requested context but kept attempting another tool call after the harness closed tool use.",
+						"Please ask the same question again with 'answer from the already-read results' if you want a model-written synthesis.",
+						"",
+						"Harness note: the provider suppressed the extra tool call to avoid a loop.",
+					].join("\n");
+					output.content.push({ type: "text", text: fallbackText });
+					stream.push({ type: "text_start", contentIndex: 0, partial: output });
+					stream.push({ type: "text_delta", contentIndex: 0, delta: fallbackText, partial: output });
+					stream.push({ type: "text_end", contentIndex: 0, content: fallbackText, partial: output });
+					stream.push({ type: "done", reason: "stop", message: output });
+					stream.end();
+					return;
 				}
 				if (isUnknownToolCall(toolCall, context.tools)) {
 					throw new Error(`Sarvam returned unavailable tool call "${toolCall.name}". Available tools: ${context.tools?.map((tool) => tool.name).join(", ") ?? "none"}.`);
