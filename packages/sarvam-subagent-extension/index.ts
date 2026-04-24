@@ -14,7 +14,7 @@ const ROLE_TOOLS: Record<SubagentRole, string> = {
 
 const ROLE_PROMPTS: Record<SubagentRole, string> = {
 	scout:
-		"You are the Sarvam 105B scout subagent. Inspect only the requested files/context. Do not edit files. Return concise findings with relevant paths and open questions.",
+		"You are the Sarvam 105B scout subagent. Inspect only the requested files/context. Do not edit files. Use the minimum necessary tool calls, then answer directly with concise findings, relevant paths, and open questions.",
 	worker:
 		"You are the Sarvam 105B worker subagent. Make only the assigned change inside the provided write scope. Read before editing and verify afterward.",
 	reviewer:
@@ -30,7 +30,16 @@ function text(value: string) {
 function runSubagent(role: SubagentRole, task: string, cwd: string, timeoutMs: number): Promise<string> {
 	const cliPath = join(cwd, "pi-mono", "packages", "coding-agent", "dist", "cli.js");
 	const providerPath = join(cwd, "packages", "sarvam-provider", "index.ts");
-	const prompt = `${ROLE_PROMPTS[role]}\n\nTask:\n${task}`;
+	const prompt = [
+		ROLE_PROMPTS[role],
+		"Child-agent protocol:",
+		"- Complete this in print mode.",
+		"- Do not wait for user input.",
+		"- Do not start an interactive conversation.",
+		"- Once you have enough context, stop using tools and provide the final answer.",
+		"",
+		`Task:\n${task}`,
+	].join("\n");
 
 	return new Promise((resolve, reject) => {
 		const child = spawn(
@@ -45,12 +54,14 @@ function runSubagent(role: SubagentRole, task: string, cwd: string, timeoutMs: n
 				"sarvam-105b",
 				"--tools",
 				ROLE_TOOLS[role],
+				"--no-session",
 				"--print",
 				prompt,
 			],
 			{
 				cwd,
 				env: process.env,
+				stdio: ["ignore", "pipe", "pipe"],
 				windowsHide: true,
 			},
 		);
@@ -59,7 +70,12 @@ function runSubagent(role: SubagentRole, task: string, cwd: string, timeoutMs: n
 		let stderr = "";
 		const timeout = setTimeout(() => {
 			child.kill();
-			reject(new Error(`Sarvam subagent timed out after ${timeoutMs}ms`));
+			const partial = stdout.trim();
+			if (partial) {
+				resolve(`${partial}\n\n[Harness note: Sarvam subagent timed out after ${timeoutMs}ms; returning partial output.]`);
+				return;
+			}
+			reject(new Error(`Sarvam subagent timed out after ${timeoutMs}ms. ${stderr.trim()}`.trim()));
 		}, timeoutMs);
 
 		child.stdout.on("data", (chunk) => {
@@ -102,7 +118,7 @@ const sarvamSubagentTool = defineTool({
 		timeoutSeconds: Type.Optional(Type.Number({ description: "Timeout in seconds. Defaults to 120." })),
 	}),
 	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-		const timeoutMs = Math.max(10, params.timeoutSeconds ?? 120) * 1000;
+		const timeoutMs = Math.max(10, params.timeoutSeconds ?? 240) * 1000;
 		if (signal.aborted) {
 			throw new Error("Sarvam subagent aborted before start.");
 		}

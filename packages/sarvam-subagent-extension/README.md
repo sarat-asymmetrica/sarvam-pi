@@ -4,6 +4,8 @@ Narrow subagent tool for launching child Pi processes with Sarvam 105B.
 
 The first smoke should use `scout` only. The tool can optionally append planned/completed child-call records into RLM state when given a `sessionId`.
 
+Child agents run with `--no-session --print`, ignored stdin, and a default 240 second timeout. If a child times out after producing output, the wrapper returns the partial output with a harness note instead of discarding it.
+
 ## Command
 
 ```powershell

@@ -27,3 +27,5 @@ Create an RLM session titled "subagent smoke". Then use sarvam_subagent with rol
 - child Sarvam runs with role `scout`
 - child output returns to root
 - `children.jsonl` contains running/completed records for the scout call
+
+If the first run times out, retry with `timeoutSeconds: 300` in the `sarvam_subagent` call or ask the root agent to delegate a narrower scout task.
