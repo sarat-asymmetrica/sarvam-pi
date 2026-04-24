@@ -20,6 +20,8 @@ if (!process.env.SARVAM_API_KEY && SARVAM_API_KEY) {
 const PATH_TOOLS = new Set(["read", "grep", "find", "ls", "write", "edit"]);
 const READ_ONLY_TOOL_RESULT_LIMIT = 2;
 const MUTATION_TOOL_RESULT_LIMIT = 4;
+const DEFAULT_MUTATION_ROOT = "experiments/002-tool-loop-smoke/fixture/";
+const MUTATING_TOOLS = new Set(["edit", "write"]);
 
 function textFromContent(content: any): string {
 	if (typeof content === "string") {
@@ -115,6 +117,8 @@ function buildToolProtocolPrompt(tools?: Tool[]): string {
 		"Use arg_key path for file tools. Do not use file_path.",
 		"For edit, use path and edits, where edits is an array of { oldText, newText }.",
 		"For write, use path and content.",
+		"For edit and write, read the target file first and verify by reading it afterward.",
+		"During mutation smoke tests, edit/write only under experiments/002-tool-loop-smoke/fixture/ unless the user explicitly gives another write scope.",
 		"For bash, use command and optional timeout.",
 		"After tool results give enough context, answer the user normally.",
 		"Do not read the same file repeatedly in the same turn.",
@@ -363,6 +367,54 @@ function normalizeToolArguments(toolName: string, args: Record<string, any>): Re
 	return normalized;
 }
 
+function normalizePathForPolicy(path: string): string {
+	return path.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function mutationRoot(): string {
+	return normalizePathForPolicy(process.env.SARVAM_PI_MUTATION_ROOT ?? DEFAULT_MUTATION_ROOT);
+}
+
+function isSensitiveMutationPath(path: string): boolean {
+	const normalized = normalizePathForPolicy(path).toLowerCase();
+	return (
+		normalized.includes("/pi-mono/") ||
+		normalized === "pi-mono" ||
+		normalized.startsWith("pi-mono/") ||
+		normalized.endsWith("/.env") ||
+		normalized.includes("/.env.") ||
+		normalized.includes("secret") ||
+		normalized.includes("credential")
+	);
+}
+
+function validateToolCall(toolCall: ToolCall): void {
+	if (!MUTATING_TOOLS.has(toolCall.name)) {
+		return;
+	}
+
+	const path = typeof toolCall.arguments?.path === "string" ? toolCall.arguments.path : "";
+	if (!path) {
+		throw new Error(`Mutation tool "${toolCall.name}" requires a path argument.`);
+	}
+
+	const normalized = normalizePathForPolicy(path);
+	if (isSensitiveMutationPath(normalized)) {
+		throw new Error(`Blocked unsafe mutation path "${path}". Do not edit pi-mono, env files, secrets, or credentials.`);
+	}
+
+	if (process.env.SARVAM_PI_ALLOW_ANY_MUTATION_PATH === "1") {
+		return;
+	}
+
+	const root = mutationRoot();
+	if (!normalized.startsWith(root)) {
+		throw new Error(
+			`Blocked mutation path "${path}". Current mutation scope is "${root}". Set SARVAM_PI_MUTATION_ROOT to change the scope or SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1 to disable this guard.`,
+		);
+	}
+}
+
 function parseSarvamToolCall(text: string): ToolCall | undefined {
 	const toolMatch = text.match(/<tool_call>\s*([A-Za-z0-9_-]+)([\s\S]*?)(?:<\/tool_call>|$)/i);
 	if (!toolMatch) {
@@ -501,6 +553,7 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 				if (isUnknownToolCall(toolCall, context.tools)) {
 					throw new Error(`Sarvam returned unavailable tool call "${toolCall.name}". Available tools: ${context.tools?.map((tool) => tool.name).join(", ") ?? "none"}.`);
 				}
+				validateToolCall(toolCall);
 				output.content.push(toolCall);
 				output.stopReason = "toolUse";
 				stream.push({ type: "toolcall_start", contentIndex: 0, partial: output });

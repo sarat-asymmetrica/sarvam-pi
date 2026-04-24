@@ -76,6 +76,16 @@ For Pi's `edit` tool, legacy single replacement arguments are converted to:
 }
 ```
 
+## Mutation Guard
+
+By default, `edit` and `write` are only allowed under:
+
+```text
+experiments/002-tool-loop-smoke/fixture/
+```
+
+The provider also blocks mutation paths involving `pi-mono/`, env files, secrets, or credentials. Later controlled tests can set `SARVAM_PI_MUTATION_ROOT` to a different write scope or `SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1` to disable the scope guard.
+
 ## Request Rules
 
 When tools are active, every request includes the active tool schemas. Sarvam rejects follow-up requests containing tool history unless the `tools` array is present.

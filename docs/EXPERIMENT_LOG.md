@@ -36,6 +36,7 @@ Observed first tool-loop mismatch:
 - Sarvam then returned another `read` call even after synthesis was required. Added a one-shot synthesis retry: if tools are closed and Sarvam still emits a tool call, resend flattened history with a stricter final-answer instruction and no tools.
 - Synthesis retry still produced `toolName`, so the retry now uses a clean transcript with only the original user request and retrieved content. If Sarvam still emits a tool call, the provider suppresses it and returns a harness note instead of failing the turn.
 - When asking Sarvam to explain the tool bridge, the final answer may quote `<tool_call>` examples from `TOOL_PROTOCOL.md`. The synthesis retry now treats XML-ish tool-call text as prose and only suppresses native tool calls.
+- Before mutation smoke, added provider-level mutation guards: edit/write are scoped to `experiments/002-tool-loop-smoke/fixture/` by default and sensitive paths such as `pi-mono/`, env files, secrets, and credentials are blocked.
 
 Next step:
 

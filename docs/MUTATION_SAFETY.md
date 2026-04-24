@@ -10,6 +10,26 @@ Mutation tools are only safe after read-only tools are stable. The first write/e
 experiments/002-tool-loop-smoke/fixture/agent-notes.md
 ```
 
+By default, the provider blocks `edit` and `write` outside:
+
+```text
+experiments/002-tool-loop-smoke/fixture/
+```
+
+To change the allowed mutation root for a later controlled test:
+
+```powershell
+$env:SARVAM_PI_MUTATION_ROOT = "path/to/allowed/root/"
+```
+
+To disable this guard for a deliberate broader run:
+
+```powershell
+$env:SARVAM_PI_ALLOW_ANY_MUTATION_PATH = "1"
+```
+
+Do not disable it during the first mutation smoke.
+
 ## Rules
 
 - Read before editing.
@@ -30,6 +50,14 @@ The provider currently normalizes:
 - `cmd` to `command`
 
 The provider also converts legacy single-edit calls into Pi's `edits: [{ oldText, newText }]` shape.
+
+The provider blocks mutation calls to:
+
+- `pi-mono/`
+- `.env` and `.env.*`
+- paths containing `secret`
+- paths containing `credential`
+- paths outside the current mutation root, unless explicitly overridden
 
 ## Smoke Prompt
 
