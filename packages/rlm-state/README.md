@@ -2,13 +2,50 @@
 
 External state layer for recursive language-model execution experiments.
 
-Planned persisted surfaces:
+The first implementation is intentionally file-backed. It gives the harness durable state without adding database complexity.
 
-- active context summary
-- full root trajectory
-- compacted prompt summary
-- branch and child-call metadata
-- memory promotion candidates
-- replay manifests for benchmarks
+## Files
 
-The first implementation should be file-backed JSONL so every experiment can be replayed without adding database complexity.
+Default root:
+
+```text
+.sarvam-pi/rlm-state/
+  sessions/
+    <session-id>/
+      manifest.json
+      trajectory.jsonl
+      context.json
+      compaction.md
+      children.jsonl
+```
+
+## API Sketch
+
+```ts
+import { createRlmStateStore } from "./packages/rlm-state/index.ts";
+
+const store = createRlmStateStore();
+const session = await store.createSession("provider smoke");
+
+await store.appendTrajectory(session.id, {
+  type: "user_prompt",
+  text: "Read README.md",
+});
+
+await store.writeContext(session.id, {
+  summary: "Testing Sarvam tool use through Pi.",
+  activeFiles: ["README.md"],
+  openQuestions: [],
+  invariants: ["Do not modify pi-mono/"],
+});
+```
+
+## RLM Mapping
+
+- `trajectory.jsonl`: full root execution trace
+- `context.json`: current compact active state
+- `compaction.md`: prompt-facing summary that can survive context pressure
+- `children.jsonl`: recursive child/subagent calls and results
+- `manifest.json`: replay and benchmark metadata
+
+This mirrors the useful part of `C:/Projects/rlm`: keep context and history outside the prompt, then let the model operate over a compact active view.
