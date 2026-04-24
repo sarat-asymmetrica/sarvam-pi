@@ -82,6 +82,15 @@ When tools are active, every request includes the active tool schemas. Sarvam re
 
 The provider also injects a small tool-protocol prompt only when tools are active. This prompt tells Sarvam to emit one tool call instead of prose when it needs a tool.
 
+## Loop Guard
+
+Sarvam can sometimes keep reading after it has enough context. The provider applies a synthesis guard:
+
+- after four tool results since the last user message, send `tool_choice: "none"`
+- after the same file has been read twice in the same turn, send `tool_choice: "none"`
+
+This keeps multi-file inspection possible while preventing runaway rereads. The model should then synthesize an answer from the gathered tool results.
+
 ## Diagnostics
 
 The provider should fail loudly when:

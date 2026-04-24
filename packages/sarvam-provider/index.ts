@@ -18,6 +18,7 @@ if (!process.env.SARVAM_API_KEY && SARVAM_API_KEY) {
 }
 
 const PATH_TOOLS = new Set(["read", "grep", "find", "ls", "write", "edit"]);
+const MAX_TOOL_RESULTS_BEFORE_SYNTHESIS = 4;
 
 function textFromContent(content: any): string {
 	if (typeof content === "string") {
@@ -92,7 +93,9 @@ function buildToolProtocolPrompt(tools?: Tool[]): string {
 		"For edit, use path and edits, where edits is an array of { oldText, newText }.",
 		"For write, use path and content.",
 		"For bash, use command and optional timeout.",
-		"After a tool result is returned, answer the user normally.",
+		"After tool results give enough context, answer the user normally.",
+		"Do not read the same file repeatedly in the same turn.",
+		"If you have already read the files the user asked for, stop using tools and synthesize the answer.",
 	].join("\n");
 }
 
@@ -125,6 +128,55 @@ function buildTools(tools?: Tool[]): any[] | undefined {
 			parameters: tool.parameters,
 		},
 	}));
+}
+
+function toolResultsSinceLastUser(context: Context): number {
+	let count = 0;
+	for (let i = context.messages.length - 1; i >= 0; i--) {
+		const message = context.messages[i];
+		if (message.role === "user") {
+			break;
+		}
+		if (message.role === "toolResult") {
+			count++;
+		}
+	}
+	return count;
+}
+
+function repeatedToolReadsSinceLastUser(context: Context): Map<string, number> {
+	const reads = new Map<string, number>();
+	for (let i = context.messages.length - 1; i >= 0; i--) {
+		const message = context.messages[i];
+		if (message.role === "user") {
+			break;
+		}
+		if (message.role !== "assistant") {
+			continue;
+		}
+		for (const item of message.content) {
+			if (item.type !== "toolCall" || item.name !== "read") {
+				continue;
+			}
+			const path = String(item.arguments?.path ?? "");
+			if (path) {
+				reads.set(path, (reads.get(path) ?? 0) + 1);
+			}
+		}
+	}
+	return reads;
+}
+
+function shouldForceSynthesis(context: Context): boolean {
+	if (toolResultsSinceLastUser(context) >= MAX_TOOL_RESULTS_BEFORE_SYNTHESIS) {
+		return true;
+	}
+	for (const count of repeatedToolReadsSinceLastUser(context).values()) {
+		if (count >= 2) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function normalizeToolArguments(toolName: string, args: Record<string, any>): Record<string, any> {
@@ -248,6 +300,7 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 			}
 
 			stream.push({ type: "start", partial: output });
+			const forceSynthesis = shouldForceSynthesis(context);
 
 			const response = await fetch(`${model.baseUrl}/chat/completions`, {
 				method: "POST",
@@ -259,6 +312,7 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 					model: model.id,
 					messages: buildMessages(context),
 					tools: buildTools(context.tools),
+					tool_choice: forceSynthesis ? "none" : "auto",
 					max_tokens: options?.maxTokens ?? model.maxTokens,
 					stream: false,
 				}),
