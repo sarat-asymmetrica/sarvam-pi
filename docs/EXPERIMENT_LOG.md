@@ -38,6 +38,7 @@ Observed first tool-loop mismatch:
 - When asking Sarvam to explain the tool bridge, the final answer may quote `<tool_call>` examples from `TOOL_PROTOCOL.md`. The synthesis retry now treats XML-ish tool-call text as prose and only suppresses native tool calls.
 - Before mutation smoke, added provider-level mutation guards: edit/write are scoped to `experiments/002-tool-loop-smoke/fixture/` by default and sensitive paths such as `pi-mono/`, env files, secrets, and credentials are blocked.
 - Mutation smoke passed: Sarvam read `experiments/002-tool-loop-smoke/fixture/agent-notes.md`, edited the TODO line, read the file again to verify, and summarized the exact change. Latency was reported as excellent.
+- RLM smoke loaded the state tools and successfully created a session plus trajectory event, but the read-only synthesis guard closed tools before the remaining state writes. Raised the synthesis limit to eight tool results when `rlm_*` tools are active.
 
 Next step:
 

@@ -98,6 +98,7 @@ Sarvam can sometimes keep reading after it has enough context. The provider appl
 
 - after two tool results in read-only sessions, close tool use and flatten tool history into plain text
 - after four tool results in mutation/bash sessions, close tool use and flatten tool history into plain text
+- after eight tool results in RLM state sessions, close tool use and flatten tool history into plain text
 - after the same file has been read twice in the same turn, close tool use
 
 This keeps multi-file inspection possible while preventing runaway rereads. Once the guard trips, the provider omits tool schemas and converts previous tool calls/results into ordinary messages so Sarvam must synthesize an answer from gathered context.

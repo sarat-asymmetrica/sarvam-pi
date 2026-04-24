@@ -20,6 +20,7 @@ if (!process.env.SARVAM_API_KEY && SARVAM_API_KEY) {
 const PATH_TOOLS = new Set(["read", "grep", "find", "ls", "write", "edit"]);
 const READ_ONLY_TOOL_RESULT_LIMIT = 2;
 const MUTATION_TOOL_RESULT_LIMIT = 4;
+const STATE_TOOL_RESULT_LIMIT = 8;
 const DEFAULT_MUTATION_ROOT = "experiments/002-tool-loop-smoke/fixture/";
 const MUTATING_TOOLS = new Set(["edit", "write"]);
 
@@ -204,7 +205,12 @@ function repeatedToolReadsSinceLastUser(context: Context): Map<string, number> {
 
 function shouldForceSynthesis(context: Context): boolean {
 	const hasMutationTools = context.tools?.some((tool) => ["edit", "write", "bash"].includes(tool.name)) ?? false;
-	const resultLimit = hasMutationTools ? MUTATION_TOOL_RESULT_LIMIT : READ_ONLY_TOOL_RESULT_LIMIT;
+	const hasStateTools = context.tools?.some((tool) => tool.name.startsWith("rlm_")) ?? false;
+	const resultLimit = hasStateTools
+		? STATE_TOOL_RESULT_LIMIT
+		: hasMutationTools
+			? MUTATION_TOOL_RESULT_LIMIT
+			: READ_ONLY_TOOL_RESULT_LIMIT;
 	if (toolResultsSinceLastUser(context) >= resultLimit) {
 		return true;
 	}
