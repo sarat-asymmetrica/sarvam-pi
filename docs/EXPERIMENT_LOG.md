@@ -32,6 +32,7 @@ Observed first tool-loop mismatch:
 - With tools available, Sarvam first responded in prose: `We need to read README file... Use read tool.` Added a provider-level tool protocol prompt that asks for exactly one XML-ish `<tool_call>` and `path` arguments when a tool is needed.
 - After sending real tool schemas, Sarvam may return native OpenAI-style `message.tool_calls` instead of XML-ish text. Added native `tool_calls` parsing and an explicit error when Sarvam returns neither text nor tool calls.
 - Read-only test showed a tool loop: Sarvam successfully read requested docs, then repeatedly re-read `README.md` instead of synthesizing. Added a provider loop guard that forces `tool_choice: "none"` after repeated reads or four tool results since the last user turn.
+- Follow-up test showed malformed tool names (`tool`, `tool_name`) after successful reads. Strengthened synthesis guard: read-only sessions close tool use after two tool results, flatten tool history into plain text, omit tool schemas, and reject unavailable tool names visibly.
 
 Next step:
 

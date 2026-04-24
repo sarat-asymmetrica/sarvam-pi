@@ -18,7 +18,8 @@ if (!process.env.SARVAM_API_KEY && SARVAM_API_KEY) {
 }
 
 const PATH_TOOLS = new Set(["read", "grep", "find", "ls", "write", "edit"]);
-const MAX_TOOL_RESULTS_BEFORE_SYNTHESIS = 4;
+const READ_ONLY_TOOL_RESULT_LIMIT = 2;
+const MUTATION_TOOL_RESULT_LIMIT = 4;
 
 function textFromContent(content: any): string {
 	if (typeof content === "string") {
@@ -34,13 +35,32 @@ function textFromContent(content: any): string {
 		.join("\n");
 }
 
-function toOpenAIMessage(message: any): any | undefined {
+interface MessageBuildOptions {
+	flattenToolHistory?: boolean;
+}
+
+function toOpenAIMessage(message: any, options: MessageBuildOptions = {}): any | undefined {
 	if (message.role === "user") {
 		const content = textFromContent(message.content);
 		return content ? { role: "user", content } : undefined;
 	}
 
 	if (message.role === "assistant") {
+		if (options.flattenToolHistory) {
+			const textParts = message.content
+				?.map((item: any) => {
+					if (item.type === "text") return item.text;
+					if (item.type === "thinking") return item.thinking;
+					if (item.type === "toolCall") {
+						return `Called tool ${item.name} with arguments ${JSON.stringify(item.arguments ?? {})}.`;
+					}
+					return "";
+				})
+				.filter(Boolean)
+				.join("\n");
+			return textParts ? { role: "assistant", content: textParts } : undefined;
+		}
+
 		const toolCalls = message.content
 			?.filter((item: any) => item.type === "toolCall")
 			.map((item: any) => ({
@@ -68,6 +88,9 @@ function toOpenAIMessage(message: any): any | undefined {
 
 	if (message.role === "toolResult") {
 		const content = textFromContent(message.content);
+		if (options.flattenToolHistory) {
+			return content ? { role: "user", content: `Tool result from ${message.toolName}:\n${content}` } : undefined;
+		}
 		return content ? { role: "tool", tool_call_id: message.toolCallId, content } : undefined;
 	}
 
@@ -99,15 +122,17 @@ function buildToolProtocolPrompt(tools?: Tool[]): string {
 	].join("\n");
 }
 
-function buildMessages(context: Context): any[] {
+function buildMessages(context: Context, options: MessageBuildOptions = {}): any[] {
 	const messages: any[] = [];
-	const toolProtocolPrompt = buildToolProtocolPrompt(context.tools);
+	const toolProtocolPrompt = options.flattenToolHistory
+		? "Tool use is now closed for this turn. Synthesize the final answer from the tool results already provided. Do not request or mention another tool call."
+		: buildToolProtocolPrompt(context.tools);
 	const systemPrompt = [context.systemPrompt, toolProtocolPrompt].filter((part) => part?.trim()).join("\n\n");
 	if (systemPrompt.trim()) {
 		messages.push({ role: "system", content: systemPrompt });
 	}
 	for (const message of context.messages) {
-		const converted = toOpenAIMessage(message);
+		const converted = toOpenAIMessage(message, options);
 		if (converted) {
 			messages.push(converted);
 		}
@@ -168,7 +193,9 @@ function repeatedToolReadsSinceLastUser(context: Context): Map<string, number> {
 }
 
 function shouldForceSynthesis(context: Context): boolean {
-	if (toolResultsSinceLastUser(context) >= MAX_TOOL_RESULTS_BEFORE_SYNTHESIS) {
+	const hasMutationTools = context.tools?.some((tool) => ["edit", "write", "bash"].includes(tool.name)) ?? false;
+	const resultLimit = hasMutationTools ? MUTATION_TOOL_RESULT_LIMIT : READ_ONLY_TOOL_RESULT_LIMIT;
+	if (toolResultsSinceLastUser(context) >= resultLimit) {
 		return true;
 	}
 	for (const count of repeatedToolReadsSinceLastUser(context).values()) {
@@ -177,6 +204,13 @@ function shouldForceSynthesis(context: Context): boolean {
 		}
 	}
 	return false;
+}
+
+function isUnknownToolCall(toolCall: ToolCall, tools?: Tool[]): boolean {
+	if (!tools?.length) {
+		return false;
+	}
+	return !tools.some((tool) => tool.name === toolCall.name);
 }
 
 function normalizeToolArguments(toolName: string, args: Record<string, any>): Record<string, any> {
@@ -310,9 +344,9 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 				},
 				body: JSON.stringify({
 					model: model.id,
-					messages: buildMessages(context),
-					tools: buildTools(context.tools),
-					tool_choice: forceSynthesis ? "none" : "auto",
+					messages: buildMessages(context, { flattenToolHistory: forceSynthesis }),
+					tools: forceSynthesis ? undefined : buildTools(context.tools),
+					tool_choice: forceSynthesis ? undefined : "auto",
 					max_tokens: options?.maxTokens ?? model.maxTokens,
 					stream: false,
 				}),
@@ -333,6 +367,11 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 
 			const toolCall = parseNativeToolCall(payload) ?? parseSarvamToolCall(text);
 			if (toolCall) {
+				if (forceSynthesis || isUnknownToolCall(toolCall, context.tools)) {
+					throw new Error(
+						`Sarvam returned tool call "${toolCall.name}" when synthesis was required or the tool was unavailable. Restart the turn or ask Sarvam to answer from the tool results already shown.`,
+					);
+				}
 				output.content.push(toolCall);
 				output.stopReason = "toolUse";
 				stream.push({ type: "toolcall_start", contentIndex: 0, partial: output });

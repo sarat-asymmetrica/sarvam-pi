@@ -86,10 +86,13 @@ The provider also injects a small tool-protocol prompt only when tools are activ
 
 Sarvam can sometimes keep reading after it has enough context. The provider applies a synthesis guard:
 
-- after four tool results since the last user message, send `tool_choice: "none"`
-- after the same file has been read twice in the same turn, send `tool_choice: "none"`
+- after two tool results in read-only sessions, close tool use and flatten tool history into plain text
+- after four tool results in mutation/bash sessions, close tool use and flatten tool history into plain text
+- after the same file has been read twice in the same turn, close tool use
 
-This keeps multi-file inspection possible while preventing runaway rereads. The model should then synthesize an answer from the gathered tool results.
+This keeps multi-file inspection possible while preventing runaway rereads. Once the guard trips, the provider omits tool schemas and converts previous tool calls/results into ordinary messages so Sarvam must synthesize an answer from gathered context.
+
+If Sarvam still returns an unavailable tool name such as `tool` or `tool_name`, the provider raises a visible protocol error instead of executing a bogus call.
 
 ## Diagnostics
 
