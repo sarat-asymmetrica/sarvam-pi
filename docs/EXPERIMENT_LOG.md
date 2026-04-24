@@ -41,6 +41,7 @@ Observed first tool-loop mismatch:
 - RLM smoke loaded the state tools and successfully created a session plus trajectory event, but the read-only synthesis guard closed tools before the remaining state writes. Raised the synthesis limit to eight tool results when `rlm_*` tools are active.
 - RLM smoke passed after the guard adjustment. Sarvam created session `0c3ef84a-6c54-4c4a-8320-1dd1632fae37`, appended trajectory, wrote and read context, wrote compaction, appended a planned `scout` child call using `sarvam/sarvam-105b`, and synthesized the final state summary.
 - First subagent smoke launched `sarvam_subagent` but the child timed out after 120 seconds. Patched the subagent wrapper to use `--no-session --print`, ignore stdin, use a stricter child protocol, default to 240 seconds, and return partial output on timeout.
+- Subagent smoke passed after hardening. Root Sarvam created session `d85302ab-9c37-487d-8b91-1bdc2ed4c457`, launched a Sarvam 105B `scout` child process, received a provider responsibility summary, and recorded running/completed child-call records in RLM state.
 
 Next step:
 
