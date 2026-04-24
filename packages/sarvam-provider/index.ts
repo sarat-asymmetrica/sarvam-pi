@@ -471,7 +471,7 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 						options?.signal,
 					);
 					text = getPayloadText(payload);
-					const retryToolCall = parseNativeToolCall(payload) ?? parseSarvamToolCall(text);
+					const retryToolCall = parseNativeToolCall(payload);
 					if (!retryToolCall && text.trim()) {
 						output.content.push({ type: "text", text });
 						output.usage.input = payload.usage?.prompt_tokens ?? 0;

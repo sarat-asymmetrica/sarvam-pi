@@ -96,6 +96,8 @@ If Sarvam still returns an unavailable tool name such as `tool` or `tool_name`, 
 
 If Sarvam returns another valid-looking tool call after tool use has been closed, the provider performs one synthesis retry with a clean transcript: original user request plus retrieved tool-result content, with no prior tool-call messages. If Sarvam still asks for a tool after that retry, the provider suppresses the extra call and returns a harness note instead of re-entering the loop.
 
+During that final synthesis retry, XML-ish `<tool_call>` text is treated as prose. This matters when Sarvam is explaining the bridge itself and quotes protocol examples from this document.
+
 ## Diagnostics
 
 The provider should fail loudly when:
