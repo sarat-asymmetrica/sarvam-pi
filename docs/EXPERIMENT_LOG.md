@@ -39,6 +39,7 @@ Observed first tool-loop mismatch:
 - Before mutation smoke, added provider-level mutation guards: edit/write are scoped to `experiments/002-tool-loop-smoke/fixture/` by default and sensitive paths such as `pi-mono/`, env files, secrets, and credentials are blocked.
 - Mutation smoke passed: Sarvam read `experiments/002-tool-loop-smoke/fixture/agent-notes.md`, edited the TODO line, read the file again to verify, and summarized the exact change. Latency was reported as excellent.
 - RLM smoke loaded the state tools and successfully created a session plus trajectory event, but the read-only synthesis guard closed tools before the remaining state writes. Raised the synthesis limit to eight tool results when `rlm_*` tools are active.
+- RLM smoke passed after the guard adjustment. Sarvam created session `0c3ef84a-6c54-4c4a-8320-1dd1632fae37`, appended trajectory, wrote and read context, wrote compaction, appended a planned `scout` child call using `sarvam/sarvam-105b`, and synthesized the final state summary.
 
 Next step:
 
