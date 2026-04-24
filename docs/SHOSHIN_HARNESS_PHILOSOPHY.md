@@ -33,6 +33,7 @@ Each inversion names a **specific pitfall** Commander hit during his first year,
 | 7 | "Code written" = done | **MVVM + end-to-end wired = done** | AI's per-turn attention + org-mode assumption → feature graveyard; wiring must be a first-class gate |
 | 8 | AI knows via training | **Search first — find the right answer at the right juncture** | Training cutoff always trails current stable versions; "knowing you don't know" is the senior dev's real superpower |
 | 9 | GitHub by default | **Local git default; GitHub opt-in** | Explicit signal to AI: *"this is not production, recovery is cheap, experiment boldly."* Breaks the training-data production-bias |
+| 10 | JSON everywhere as the lingua franca | **Three-tier serialization: Cap'n Proto internal + TOON at LLM boundary + JSON only for human-facing surfaces. Regex-free data flow.** | JSON-everywhere is a vestige of human-primary-maintainer assumption. When AI is the primary maintainer, binary + capability-typed + token-efficient formats unlock speed, security, and clarity all at once |
 
 ### Defense notes
 
@@ -41,6 +42,7 @@ Each inversion names a **specific pitfall** Commander hit during his first year,
 - **#5 (VPS)**: Containerization collapses self-hosting complexity. One `./deploy.sh hetzner` command commoditizes "push to your own server" the way Vercel commoditized "push to deploy."
 - **#6 (offline)**: Conservative estimate — 70%+ of vibe-coder apps are better as offline-only desktop. Also a business wedge: sell Telugu invoice app as ₹500 one-time installer.
 - **#9 (local git)**: AI that sees `git remote -v` showing a production URL triggers conservative, hedged behavior patterns. Local-only repos free the AI to explore boldly.
+- **#10 (three-tier serialization)**: Cap'n Proto's "binary, not human-readable" is a feature when AI is the primary maintainer — AI pattern-matches schemas from docs trivially, and binary unlocks zero-copy parse + capability-based security + cross-language bindings + schema evolution for free. TOON at the LLM boundary compounds Sarvam's 128K effective ~32K window into ~42K equivalent (30% token savings, proven in Ananta production). JSON survives only at human-facing surfaces. Regex becomes extinct because data never leaves structured form between stages. **Cap'n Proto capabilities ARE Contract I implemented at the type-system level**: forbidden operations are literally inexpressible in the subagent's vocabulary, not merely rejected by a hook.
 
 ---
 
@@ -94,7 +96,8 @@ Each inversion and contract maps to something buildable:
 | Inv-7 Wiring gate | See `FEATURE_DONE_CONTRACT.md` — state machine enforced via harness |
 | Inv-8 Search first | Pre-scaffold hook: web-search for latest stable versions; AI may not pick a dep without a recent search result |
 | Inv-9 Local git | `git init` default; `origin` push requires explicit user action + consent |
-| Contract A Calibration | Every agent response JSON schema includes `confidence: 0..1` |
+| Inv-10 Three-tier serialization | `schemas/*.capnp` defines every subagent interface, capability type, and state struct. TOON encoder at LLM boundary. JSON reserved for human-facing REST/logs. `shoshin inspect <file.bin>` pretty-prints binary with schema. See `CAPABILITY_ENVELOPE.md` for capability-type specifics |
+| Contract A Calibration | Every agent response schema includes `confidence: 0..1` (Cap'n Proto typed field, not JSON convention) |
 | Contract B Memory | RLM state spine (already built by GPT) + per-project MEMORY.md |
 | Contract C Reversal | Every mutation tool emits a `.shoshin/snapshots/<ts>/` tarball; one-command restore |
 | Contract D Invariants | `INVARIANTS.md` file format + detector runner integrated into tool loop |
