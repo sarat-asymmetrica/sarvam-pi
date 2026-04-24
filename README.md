@@ -25,6 +25,7 @@ packages/
   sarvam-provider/
   sarvam-tools/
   rlm-state/
+  rlm-state-extension/
   .pi/
     agents/
 experiments/

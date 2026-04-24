@@ -49,3 +49,7 @@ await store.writeContext(session.id, {
 - `manifest.json`: replay and benchmark metadata
 
 This mirrors the useful part of `C:/Projects/rlm`: keep context and history outside the prompt, then let the model operate over a compact active view.
+
+## Pi Tools
+
+`packages/rlm-state-extension` exposes this store to Pi as `rlm_*` tools.
