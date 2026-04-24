@@ -25,6 +25,8 @@ packages/
   sarvam-provider/
   sarvam-tools/
   rlm-state/
+  .pi/
+    agents/
 experiments/
   001-provider-smoke/
   002-tool-loop-smoke/
