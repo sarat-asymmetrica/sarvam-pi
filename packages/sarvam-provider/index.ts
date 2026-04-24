@@ -17,12 +17,25 @@ if (!process.env.SARVAM_API_KEY && SARVAM_API_KEY) {
 	process.env.SARVAM_API_KEY = SARVAM_API_KEY;
 }
 
+const PATH_TOOLS = new Set(["read", "grep", "find", "ls", "write", "edit"]);
+
+function textFromContent(content: any): string {
+	if (typeof content === "string") {
+		return content;
+	}
+	if (!Array.isArray(content)) {
+		return "";
+	}
+	return content
+		.filter((item: any) => item.type === "text")
+		.map((item: any) => item.text)
+		.filter(Boolean)
+		.join("\n");
+}
+
 function toOpenAIMessage(message: any): any | undefined {
 	if (message.role === "user") {
-		const content =
-			typeof message.content === "string"
-				? message.content
-				: message.content?.filter((item: any) => item.type === "text").map((item: any) => item.text).join("\n");
+		const content = textFromContent(message.content);
 		return content ? { role: "user", content } : undefined;
 	}
 
@@ -53,10 +66,7 @@ function toOpenAIMessage(message: any): any | undefined {
 	}
 
 	if (message.role === "toolResult") {
-		const content = message.content
-			?.filter((item: any) => item.type === "text")
-			.map((item: any) => item.text)
-			.join("\n");
+		const content = textFromContent(message.content);
 		return content ? { role: "tool", tool_call_id: message.toolCallId, content } : undefined;
 	}
 
@@ -78,7 +88,10 @@ function buildToolProtocolPrompt(tools?: Tool[]): string {
 		"<arg_key>path</arg_key>",
 		"<arg_value>README.md</arg_value>",
 		"</tool_call>",
-		"Use arg_key path for read, grep, find, and ls paths. Do not use file_path.",
+		"Use arg_key path for file tools. Do not use file_path.",
+		"For edit, use path and edits, where edits is an array of { oldText, newText }.",
+		"For write, use path and content.",
+		"For bash, use command and optional timeout.",
 		"After a tool result is returned, answer the user normally.",
 	].join("\n");
 }
@@ -120,9 +133,38 @@ function normalizeToolArguments(toolName: string, args: Record<string, any>): Re
 		normalized.path = normalized.file_path;
 		delete normalized.file_path;
 	}
-	if ("filePath" in normalized && !("path" in normalized) && ["read", "grep", "find", "ls"].includes(toolName)) {
+	if ("filePath" in normalized && !("path" in normalized) && PATH_TOOLS.has(toolName)) {
 		normalized.path = normalized.filePath;
 		delete normalized.filePath;
+	}
+	if ("filepath" in normalized && !("path" in normalized) && PATH_TOOLS.has(toolName)) {
+		normalized.path = normalized.filepath;
+		delete normalized.filepath;
+	}
+	if ("old_string" in normalized && !("oldText" in normalized)) {
+		normalized.oldText = normalized.old_string;
+		delete normalized.old_string;
+	}
+	if ("new_string" in normalized && !("newText" in normalized)) {
+		normalized.newText = normalized.new_string;
+		delete normalized.new_string;
+	}
+	if ("oldString" in normalized && !("oldText" in normalized)) {
+		normalized.oldText = normalized.oldString;
+		delete normalized.oldString;
+	}
+	if ("newString" in normalized && !("newText" in normalized)) {
+		normalized.newText = normalized.newString;
+		delete normalized.newString;
+	}
+	if (toolName === "edit" && !Array.isArray(normalized.edits) && "oldText" in normalized && "newText" in normalized) {
+		normalized.edits = [{ oldText: normalized.oldText, newText: normalized.newText }];
+		delete normalized.oldText;
+		delete normalized.newText;
+	}
+	if ("cmd" in normalized && !("command" in normalized)) {
+		normalized.command = normalized.cmd;
+		delete normalized.cmd;
 	}
 	return normalized;
 }
@@ -161,7 +203,9 @@ function parseNativeToolCall(payload: any): ToolCall | undefined {
 		try {
 			args = JSON.parse(rawArgs);
 		} catch {
-			args = {};
+			throw new Error(
+				`Sarvam returned invalid JSON tool arguments for ${nativeToolCall.function.name}: ${rawArgs.slice(0, 500)}`,
+			);
 		}
 	} else if (rawArgs && typeof rawArgs === "object") {
 		args = rawArgs;

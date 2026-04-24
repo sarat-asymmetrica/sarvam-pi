@@ -22,6 +22,8 @@ This package starts as a design scaffold. The first executable version should be
 - `requiresAssistantAfterToolResult`
 - streaming tool-call delta behavior
 
+See `docs/TOOL_PROTOCOL.md` for the current provider bridge contract and known argument normalizations.
+
 ## First Smoke Command Sketch
 
 ```powershell
