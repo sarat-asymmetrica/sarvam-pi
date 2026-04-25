@@ -1,0 +1,14 @@
+{
+  "name": "shoshin-smoke",
+  "oneLineGoal": "Foundation acceptance fixture for Shoshin harness Cluster A.",
+  "primaryUser": "shoshin developer",
+  "targetLanguages": ["en"],
+  "scaffoldMode": "lite",
+  "appShape": "cli",
+  "primaryStack": { "lang": "go" },
+  "storage": "filesystem",
+  "surfaces": ["cli"],
+  "mathPrimitives": ["digital_root", "williams_batching"],
+  "doneInvariants": ["correct", "tested", "observable"],
+  "notes": "Smoke fixture only — never built into a real app."
+}
