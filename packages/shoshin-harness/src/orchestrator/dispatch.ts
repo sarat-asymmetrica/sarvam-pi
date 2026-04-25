@@ -10,7 +10,7 @@ import { ProjectSpec } from "../spec/types.js";
 import { RoleName } from "../roles/types.js";
 import { buildSystemPrompt } from "../roles/prompt-builder.js";
 import { envelopeForRole } from "../capabilities/role-envelopes.js";
-import { envelopeSummary, toPiPlan } from "../capabilities/to-pi-tools.js";
+import { envelopeSummary, toPiPlan, toolContractForPrompt } from "../capabilities/to-pi-tools.js";
 import { hydrateMemory } from "../memory/hydrate.js";
 import { currentPulse, pulseLine } from "../time/pulse.js";
 import { readTrailTail } from "../trail/reader.js";
@@ -159,6 +159,8 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     memoryBundle: memBundle.bundle,
     timePulse: pulseLine(pulse),
     trailTail,
+    toolContract: toolContractForPrompt(env, plan),
+    capabilitySummary: envelopeSummary(env),
   });
 
   const childEnv: NodeJS.ProcessEnv = {

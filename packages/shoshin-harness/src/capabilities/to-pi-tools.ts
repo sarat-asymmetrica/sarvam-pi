@@ -58,6 +58,25 @@ export function toPiPlan(env: CapabilityEnvelope): PiToolPlan {
   };
 }
 
+export function executableTools(plan: PiToolPlan): string[] {
+  return plan.toolsArg ? plan.toolsArg.split(",").filter(Boolean) : [];
+}
+
+export function toolContractForPrompt(env: CapabilityEnvelope, plan: PiToolPlan = toPiPlan(env)): string {
+  const tools = executableTools(plan);
+  const toolLine = tools.length ? tools.join(", ") : "none";
+  return [
+    "Executable Pi tools:",
+    `  ${toolLine}`,
+    "",
+    "Tool-call contract:",
+    "- If you call a tool, its name must be copied exactly from Executable Pi tools.",
+    "- Capability labels are not tool names. Never call ReadCap, GrepCap, FindCap, LsCap, WriteCap, EditCap, BashCap, TestCap, BrowserCap, WebSearchCap, or any lowercase/camelcase variant of those labels.",
+    "- If the operation you want is not listed as an executable Pi tool, do not attempt it. Explain the limitation or complete the task in prose.",
+    "- Do not invent browser, web-search, memory, advisory, spec, or user-talk tools.",
+  ].join("\n");
+}
+
 // Plain-text summary of the envelope for prompt injection. The model reads this
 // alongside the capability whitelist in the system prompt.
 export function envelopeSummary(env: CapabilityEnvelope): string {

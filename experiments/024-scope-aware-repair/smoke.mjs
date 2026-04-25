@@ -116,7 +116,7 @@ step("Run Builder with tempting out-of-scope wiring", () => {
   );
   const features = JSON.parse(readFileSync(resolve(FIXTURE, ".shoshin", "features.json"), "utf8"));
   const feature = features.features.find((f) => f.id === "regime-classifier");
-  const inScopeFiles = ["regime.go", "classifier.go", "regime_classifier.go", "root.go"].filter((name) =>
+  const inScopeFiles = ["regime.go", "classifier.go", "classify.go", "regime_classifier.go", "root.go"].filter((name) =>
     existsSync(resolve(FIXTURE, "internal", "regime", name)),
   );
   if (scopeRepairs.length === 0 && inScopeFiles.length === 0) {

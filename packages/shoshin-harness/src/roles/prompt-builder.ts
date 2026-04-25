@@ -1,5 +1,5 @@
 // Compose a complete system prompt for a role-subagent: persona pair activation +
-// role concern + envelope summary + project spec brief + memory bundle + time pulse.
+// role concern + concrete tool contract + project spec brief + memory bundle.
 //
 // The output is what gets handed to the spawned Sarvam subagent as its system prompt.
 import { ProjectSpec, summarizeSpec } from "../spec/types.js";
@@ -15,6 +15,8 @@ export interface SystemPromptOptions {
   memoryBundle?: string; // TOON-encoded relevant memory
   timePulse?: string; // single-line current pulse
   trailTail?: string; // last-N trail records as plain text
+  toolContract?: string; // concrete Pi executable tool names and restrictions
+  capabilitySummary?: string; // abstract capability envelope for human context
 }
 
 export function buildSystemPrompt(opts: SystemPromptOptions): string {
@@ -24,10 +26,24 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
   sections.push(activatePair(role.personaPair[0], role.personaPair[1]));
   sections.push(`Working as: **${role.name.toUpperCase()}**`);
   sections.push(role.promptTemplate);
-  sections.push(
-    `Capability envelope: ${role.defaultEnvelope.join(", ")}.\n` +
-      `Operations outside this envelope are not available — do not attempt them.`,
-  );
+
+  if (opts.toolContract) {
+    sections.push(opts.toolContract);
+  } else {
+    sections.push(
+      "Executable Pi tools: unknown.\n" +
+        "Use only tool names that the runtime explicitly provides. Capability labels are not tool names.",
+    );
+  }
+
+  if (opts.capabilitySummary) {
+    sections.push(["Capability envelope (context only; not tool names):", opts.capabilitySummary].join("\n"));
+  } else {
+    sections.push(
+      `Capability envelope (context only; not tool names): ${role.defaultEnvelope.join(", ")}.\n` +
+        "Operations outside this envelope are not available.",
+    );
+  }
 
   if (opts.spec) {
     sections.push(["Project spec:", "```", summarizeSpec(opts.spec), "```"].join("\n"));
