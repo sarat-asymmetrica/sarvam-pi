@@ -22,6 +22,15 @@ export function envelopeForRole(role: RoleName, ctx: EnvelopeContext): Capabilit
   const caps: Capability[] = [];
 
   switch (role) {
+    case "host":
+      // The host is the user-facing concierge. Reads to quote spec/trail to
+      // the user, no writes. Cannot mutate code or call shell — when the
+      // user asks for action, host hands off to a specialist role.
+      caps.push({ kind: "ReadCap" });
+      caps.push({ kind: "SpecCap" });
+      caps.push({ kind: "UserTalkCap" });
+      break;
+
     case "architect":
       caps.push({ kind: "ReadCap" }, { kind: "GrepCap" }, { kind: "FindCap" }, { kind: "LsCap" });
       caps.push({ kind: "WebSearchCap", allowedDomains: ctx.webDomains });

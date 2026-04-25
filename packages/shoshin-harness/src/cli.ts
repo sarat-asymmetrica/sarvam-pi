@@ -11,6 +11,7 @@ import { runTrail } from "./trail/cli.js";
 import { runRoles } from "./roles/cli.js";
 import { runDispatch } from "./orchestrator/cli.js";
 import { runScaffoldMath } from "./templates/cli.js";
+import { runChat } from "./chat/cli.js";
 
 const program = new Command();
 
@@ -106,6 +107,18 @@ program
   .option("--dry-run", "log dispatch decisions without spawning subagents")
   .action(async (opts) => {
     await runRun(opts);
+  });
+
+program
+  .command("chat [question...]")
+  .description(
+    "One-shot warm conversation with the host (Tagore + Carl Rogers + Asya pillars). " +
+      "Pass a question inline or run with no args to type interactively.",
+  )
+  .option("--timeout-sec <n>", "host dispatch timeout in seconds (default 120)", "120")
+  .action(async (questionParts: string[] | undefined, opts) => {
+    const question = (questionParts ?? []).join(" ").trim() || undefined;
+    await runChat({ question, timeoutSec: opts.timeoutSec });
   });
 
 program

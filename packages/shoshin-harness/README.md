@@ -37,12 +37,13 @@ shoshin roles list
 
 ## What's in the Box
 
-### 7 Roles with Persona Pairs
+### 8 Roles with Persona Pairs
 
 Each subagent operates as a role with two voices in dialectic:
 
 | Role | Concern | Persona Pair |
 |------|---------|--------------|
+| **Host** | **User-facing presence — receive intent, calibrate tone, hold space** | **Tagore + Carl Rogers** |
 | Architect | System shape, invariants, structural moves | Mirzakhani + Torvalds |
 | PM | User intent → spec translation | Grace Hopper + Maya Angelou |
 | Scout | Read-only exploration | Darwin + Ada Lovelace |
@@ -51,7 +52,43 @@ Each subagent operates as a role with two voices in dialectic:
 | QA | Reproducible verification with measurement | Marie Curie + Murphy |
 | Librarian | Memory taxonomy + compaction | Borges + Knuth |
 
-`shoshin roles list` prints the catalog. `shoshin roles prompt builder` shows the full system prompt that gets sent to Sarvam.
+`shoshin roles list` prints the catalog. `shoshin roles prompt host` shows the full system prompt that gets sent to Sarvam.
+
+### Asya Pillars — Composable Persona Layers
+
+Three layered prompt fragments port Ananta's user-facing intelligence into Shoshin (lineage: `asymm-intelligence/urban_lens/pkg/persona` + `hrm_inference/pkg/cognition`):
+
+- **Seven Traits** — Patience 1.0, Wonder 0.95, Honesty 1.0, Warmth 0.9, Playfulness adaptive, Respect 1.0, EgolessService 1.0. Constants, not aspirations.
+- **EQ Engine** — User state quaternion (W=Coherence, X=Focus, Y=Creativity, Z=Persistence), regime classification (R1/R2/R3), 6 tone patterns, adaptation rules (frustration→reduce, aggression→match, flow→minimize, etc.), confidence-gated communication, "Way of Water" principle.
+- **Cognition Engine** — Cognitive event taxonomy ([Thought], [Reasoning], [Decision], [RegimeShift], [Pattern]), three-regime dynamics, hypothesis management, singularity prevention.
+
+| Role | Asya pillars |
+|------|--------------|
+| Host | full (all three) |
+| PM | light (traits + EQ; cognition reserved for host) |
+| Builder, QA, Reviewer, Scout, Architect, Librarian | none — stay mechanical/axiom-driven |
+
+Source: `src/personas/asya.ts` exporting `ASYA_TRAITS`, `ASYA_EQ`, `ASYA_COGNITION`, `ASYA_FULL`, `ASYA_LIGHT`. Roles import what they need; rigour and warmth coexist by composition.
+
+### Warm Chat Surface
+
+```bash
+shoshin chat "bhai I sold 10 chai today but the ledger looks wrong, can you help?"
+```
+
+```
+──────────── host says ────────────
+
+Bhai, I hear you—you sold 10 cups of chai today, and you're wondering whether
+the ledger is showing the amount in paise or rupees correctly. It's easy to
+get tangled when the numbers jump between the two.
+
+Could you tell me how much you charge for one cup of chai (for example, 5
+rupees, 12 rupees, or something else) and how you entered that price in the
+ledger—did you type it as rupees, or as paise?
+```
+
+The host mirrors first, asks one concrete question, never silently dispatches. Pure stand-alone usage; doesn't require an existing project.
 
 ### Feature Done Contract State Machine
 
@@ -108,6 +145,7 @@ shoshin trail [tail|filter|clear]         Inspect stigmergy trail
 shoshin roles [list|show|prompt] [name]   Inspect role catalog
 shoshin scaffold-math [--dry-run]         Copy math primitives into app
 shoshin dispatch <role> [feature]         One-shot role dispatch
+shoshin chat [question...]                Warm conversation with the host
 shoshin morning                           Plan-of-day flow
 shoshin run [--max-turns N --timeout-sec N]  Autonomous run
 shoshin evening [--no-prompt]             Reconvene flow

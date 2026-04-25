@@ -7,6 +7,7 @@
 import { z } from "zod";
 
 export const ROLE_NAMES = [
+  "host",
   "architect",
   "pm",
   "scout",
@@ -18,6 +19,9 @@ export const ROLE_NAMES = [
 export type RoleName = (typeof ROLE_NAMES)[number];
 
 export const PERSONA_NAMES = [
+  // Host pair — patient warmth + person-centered listening
+  "tagore",
+  "carl_rogers",
   // Architect pair
   "mirzakhani",
   "torvalds",
