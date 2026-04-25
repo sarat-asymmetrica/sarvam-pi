@@ -123,7 +123,7 @@ with sync_playwright() as p:
     page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
     page.goto(target)
     body = page.locator("body").inner_text(timeout=5000)
-    if not re.search(r"item|expense|kirana|total", body, re.I):
+    if not re.search(r"item|expense|kirana|unit price|price", body, re.I):
         print("SKIP: page is not an item/expense style app")
         browser.close()
         sys.exit(0)

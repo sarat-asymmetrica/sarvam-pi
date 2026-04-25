@@ -132,10 +132,9 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   let lastHtmlBehaviorGate: HtmlBehaviorGateResult | undefined;
   let currentBrief = brief;
 
+  // Keep the original scoped baseline across repairs. A failed attempt can still
+  // create the valid artifact that a later synthesis/repair attempt reports.
   for (let attempt = 0; attempt <= maxRepairAttempts; attempt++) {
-    if (attempt > 0) {
-      mutationSnapshot = shouldMutationGate(opts) ? snapshotScope(opts.cwd, opts.feature.scopePath) : null;
-    }
     dispatch = await dispatchSubagent({
       role: opts.role,
       ticketBrief: currentBrief,
