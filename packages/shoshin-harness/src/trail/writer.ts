@@ -8,12 +8,17 @@ import { shoshinFile } from "../util/paths.js";
 
 let sessionId: string | undefined;
 
+type TrailInput = Partial<TrailRecordBase> & {
+  kind: TrailKind;
+  [key: string]: unknown;
+};
+
 export function setTrailSession(id: string): void {
   sessionId = id;
 }
 
 export function logTrail(
-  record: Omit<TrailRecord, "ts" | "session"> & Partial<TrailRecordBase>,
+  record: TrailInput,
 ): void {
   try {
     const full = {
@@ -40,6 +45,30 @@ export const Trail = {
   },
   failed(role: string, error: string): void {
     logTrail({ kind: "subagent_failed", role, error });
+  },
+  sessionSummary(
+    role: string,
+    piSessionId: string | null,
+    sessionFile: string | null,
+    durationMs: number,
+    tokens: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+      total: number;
+    },
+    cost: number | null,
+  ): void {
+    logTrail({
+      kind: "session_summary",
+      role,
+      piSessionId,
+      sessionFile,
+      durationMs,
+      tokens,
+      cost,
+    });
   },
   pulse(
     sessionTurns: number,

@@ -1,0 +1,93 @@
+diff --git a/packages/coding-agent/src/core/session-manager.ts b/packages/coding-agent/src/core/session-manager.ts
+index f366274b..acedb982 100644
+--- a/packages/coding-agent/src/core/session-manager.ts
++++ b/packages/coding-agent/src/core/session-manager.ts
+@@ -34,6 +34,7 @@ export interface SessionHeader {
+ 	timestamp: string;
+ 	cwd: string;
+ 	parentSession?: string;
++	sessionFile?: string;
+ }
+ 
+ export interface NewSessionOptions {
+@@ -1055,7 +1056,7 @@ export class SessionManager {
+ 	 */
+ 	getHeader(): SessionHeader | null {
+ 		const h = this.fileEntries.find((e) => e.type === "session");
+-		return h ? (h as SessionHeader) : null;
++		return h ? { ...(h as SessionHeader), sessionFile: this.sessionFile } : null;
+ 	}
+ 
+ 	/**
+diff --git a/packages/coding-agent/src/modes/print-mode.ts b/packages/coding-agent/src/modes/print-mode.ts
+index bee517da..8310c131 100644
+--- a/packages/coding-agent/src/modes/print-mode.ts
++++ b/packages/coding-agent/src/modes/print-mode.ts
+@@ -36,6 +36,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
+ 	let unsubscribe: (() => void) | undefined;
+ 	let disposed = false;
+ 	const signalCleanupHandlers: Array<() => void> = [];
++	const startedAt = Date.now();
+ 
+ 	const disposeRuntime = async (): Promise<void> => {
+ 		if (disposed) return;
+@@ -125,25 +126,45 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
+ 			await session.prompt(message);
+ 		}
+ 
+-		if (mode === "text") {
+-			const state = session.state;
+-			const lastMessage = state.messages[state.messages.length - 1];
+-
+-			if (lastMessage?.role === "assistant") {
+-				const assistantMsg = lastMessage as AssistantMessage;
+-				if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
+-					console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
+-					exitCode = 1;
+-				} else {
+-					for (const content of assistantMsg.content) {
+-						if (content.type === "text") {
+-							writeRawStdout(`${content.text}\n`);
+-						}
++		const state = session.state;
++		const lastMessage = state.messages[state.messages.length - 1];
++		let finalText = "";
++
++		if (lastMessage?.role === "assistant") {
++			const assistantMsg = lastMessage as AssistantMessage;
++			if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
++				console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
++				exitCode = 1;
++			} else {
++				for (const content of assistantMsg.content) {
++					if (content.type === "text") {
++						finalText += `${content.text}\n`;
+ 					}
+ 				}
+ 			}
+ 		}
+ 
++		if (mode === "text") {
++			if (finalText) {
++				writeRawStdout(finalText);
++			}
++		} else {
++			writeRawStdout(
++				`${JSON.stringify({
++					type: "print_result",
++					text: finalText.trimEnd(),
++					exitCode,
++				})}\n`,
++			);
++			writeRawStdout(
++				`${JSON.stringify({
++					type: "session_summary",
++					durationMs: Date.now() - startedAt,
++					...session.getSessionStats(),
++				})}\n`,
++			);
++		}
++
+ 		return exitCode;
+ 	} catch (error: unknown) {
+ 		console.error(error instanceof Error ? error.message : String(error));

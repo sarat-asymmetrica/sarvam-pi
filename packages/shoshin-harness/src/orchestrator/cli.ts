@@ -104,6 +104,8 @@ export async function runDispatch(
 
 function defaultBrief(role: RoleName, featureId: string, featureName: string): string {
   switch (role) {
+    case "host":
+      return `Talk with the user about feature "${featureName}" (id: ${featureId}). Reflect intent and route to a specialist if action is needed.`;
     case "scout":
       return `Reconnaissance for feature "${featureName}" (id: ${featureId}). Identify relevant files, prior art, and open questions. Stop when you have enough context to brief a Builder.`;
     case "architect":

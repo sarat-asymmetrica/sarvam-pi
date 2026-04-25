@@ -41,6 +41,8 @@ function nextRoleFor(state: FeatureState): { role: RoleName; advanceTo?: Feature
 function briefFor(role: RoleName, feature: Feature, spec: ProjectSpec | null): string {
   const tail = spec ? `Project: ${spec.name} — ${spec.oneLineGoal}` : "";
   switch (role) {
+    case "host":
+      return `Talk with the user about feature "${feature.name}" (id: ${feature.id}). Reflect intent and route to a specialist if action is needed.`;
     case "scout":
       return [
         `Discovery for feature "${feature.name}" (id: ${feature.id}).`,

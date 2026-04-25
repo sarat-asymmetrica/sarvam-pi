@@ -13,6 +13,7 @@ export type TrailKind =
   | "subagent_spawn"
   | "subagent_complete"
   | "subagent_failed"
+  | "session_summary"
   | "tool_call"
   | "user_prompt"
   | "memory_write"
@@ -66,6 +67,22 @@ export interface TrailSubagentFailed extends TrailRecordBase {
   kind: "subagent_failed";
   role: string;
   error: string;
+}
+
+export interface TrailSessionSummary extends TrailRecordBase {
+  kind: "session_summary";
+  role: string;
+  piSessionId: string | null;
+  sessionFile: string | null;
+  durationMs: number;
+  tokens: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+  cost: number | null;
 }
 
 export interface TrailToolCall extends TrailRecordBase {
@@ -129,6 +146,7 @@ export type TrailRecord =
   | TrailSubagentSpawn
   | TrailSubagentComplete
   | TrailSubagentFailed
+  | TrailSessionSummary
   | TrailToolCall
   | TrailUserPrompt
   | TrailMemoryWrite

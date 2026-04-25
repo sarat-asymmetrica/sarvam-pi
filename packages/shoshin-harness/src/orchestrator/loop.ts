@@ -42,13 +42,47 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
     }
   })();
 
+  const sessionBase = `feature-${opts.feature.id}`;
+  let brief = opts.brief;
+
+  if (opts.role === "builder") {
+    const architect = await dispatchSubagent({
+      role: "architect",
+      ticketBrief: [
+        "Plan the implementation for the Builder. Do not mutate files.",
+        "",
+        "Builder ticket:",
+        opts.brief,
+      ].join("\n"),
+      scopePath: opts.feature.scopePath,
+      spec,
+      cwd: opts.cwd,
+      timeoutMs: opts.timeoutMs,
+      sessionKey: `${sessionBase}-architect`,
+    });
+
+    if (!architect.ok) {
+      return { dispatch: architect, advanced: false };
+    }
+
+    brief = [
+      opts.brief,
+      "",
+      "=== Architect plan ===",
+      architect.output,
+      "",
+      "Use the plan as guidance, but verify against the actual files before editing.",
+    ].join("\n");
+  }
+
   const dispatch = await dispatchSubagent({
     role: opts.role,
-    ticketBrief: opts.brief,
+    ticketBrief: brief,
     scopePath: opts.feature.scopePath,
     spec,
     cwd: opts.cwd,
     timeoutMs: opts.timeoutMs,
+    sessionKey: `${sessionBase}-${opts.role}`,
   });
 
   let advanced = false;

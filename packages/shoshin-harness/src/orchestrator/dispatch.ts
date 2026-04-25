@@ -15,6 +15,7 @@ import { hydrateMemory } from "../memory/hydrate.js";
 import { currentPulse, pulseLine } from "../time/pulse.js";
 import { readTrailTail } from "../trail/reader.js";
 import { Trail, logTrail } from "../trail/writer.js";
+import { readStoredSessionId, writeStoredSessionId } from "./session-store.js";
 
 export interface DispatchOptions {
   role: RoleName;
@@ -24,6 +25,15 @@ export interface DispatchOptions {
   cwd: string;
   timeoutMs?: number;
   extraSystemPromptHints?: string[];
+  sessionKey?: string;
+}
+
+export interface DispatchTokens {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
 }
 
 export interface DispatchResult {
@@ -32,6 +42,37 @@ export interface DispatchResult {
   durationMs: number;
   exitCode: number | null;
   error?: string;
+  piSessionId?: string;
+  sessionFile?: string;
+  tokens?: DispatchTokens;
+}
+
+interface PiJsonHeader {
+  type: "session";
+  id?: string;
+  sessionFile?: string;
+}
+
+interface PiPrintResult {
+  type: "print_result";
+  text?: string;
+  exitCode?: number;
+}
+
+interface PiSessionSummary {
+  type: "session_summary";
+  sessionId?: string;
+  sessionFile?: string;
+  durationMs?: number;
+  tokens?: DispatchTokens;
+  cost?: number;
+}
+
+interface ParsedPiJsonOutput {
+  text: string;
+  header?: PiJsonHeader;
+  summary?: PiSessionSummary;
+  nonJson: string[];
 }
 
 const SARVAM_PI_ROOT = resolve(
@@ -56,6 +97,37 @@ function locateSarvamProvider(): string {
     );
   }
   return candidate;
+}
+
+function parsePiJsonOutput(stdout: string): ParsedPiJsonOutput {
+  const nonJson: string[] = [];
+  let header: PiJsonHeader | undefined;
+  let result: PiPrintResult | undefined;
+  let summary: PiSessionSummary | undefined;
+
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const event = JSON.parse(trimmed) as { type?: string };
+      if (event.type === "session") {
+        header = event as PiJsonHeader;
+      } else if (event.type === "print_result") {
+        result = event as PiPrintResult;
+      } else if (event.type === "session_summary") {
+        summary = event as PiSessionSummary;
+      }
+    } catch {
+      nonJson.push(line);
+    }
+  }
+
+  return {
+    text: result?.text ?? nonJson.join("\n").trim(),
+    header,
+    summary,
+    nonJson,
+  };
 }
 
 export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchResult> {
@@ -88,14 +160,13 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
 
   const cliPath = locatePiCli();
   const providerPath = locateSarvamProvider();
+  const storedSessionId = readStoredSessionId(opts.cwd, opts.sessionKey);
 
   // The child Pi process gets:
   //   --provider sarvam --model sarvam-105b
   //   --tools <comma-separated tools allowed by envelope>
-  //   --no-session --print
+  //   --mode json, with --session <id> after the first call for a session key
   //   <prompt> as a single argument; we put the system prompt + ticket brief inline
-  //
-  // sarvam-pi's existing subagent extension uses this exact shape; we mirror it.
   const finalPrompt = [
     systemPrompt,
     "",
@@ -117,9 +188,12 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     "sarvam",
     "--model",
     "sarvam-105b",
-    "--no-session",
-    "--print",
+    "--mode",
+    "json",
   ];
+  if (storedSessionId) {
+    args.push("--session", storedSessionId);
+  }
   if (plan.toolsArg) {
     args.push("--tools", plan.toolsArg);
   }
@@ -173,19 +247,39 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
       clearTimeout(timeout);
       const elapsed = Date.now() - startedAt;
       const ok = code === 0;
-      const trimmed = stdout.trim();
+      const parsed = parsePiJsonOutput(stdout);
+      const trimmed = parsed.text.trim();
+      const piSessionId = parsed.summary?.sessionId ?? parsed.header?.id;
+      const sessionFile = parsed.summary?.sessionFile ?? parsed.header?.sessionFile;
+      if (opts.sessionKey && piSessionId) {
+        writeStoredSessionId(opts.cwd, opts.sessionKey, piSessionId);
+      }
       const digest = trimmed.length > 200 ? `${trimmed.slice(0, 200)}…` : trimmed;
       if (ok) {
         Trail.complete(opts.role, elapsed, digest);
+        if (parsed.summary?.tokens) {
+          Trail.sessionSummary(
+            opts.role,
+            piSessionId ?? null,
+            sessionFile ?? null,
+            parsed.summary.durationMs ?? elapsed,
+            parsed.summary.tokens,
+            parsed.summary.cost ?? null,
+          );
+        }
       } else {
         Trail.failed(opts.role, `exit ${code}: ${stderr.slice(0, 200)}`);
       }
+      const jsonError = parsed.nonJson.join("\n").slice(0, 500);
       resolveOuter({
         ok,
         output: trimmed,
         durationMs: elapsed,
         exitCode: code,
-        error: ok ? undefined : `exit ${code}: ${stderr.slice(0, 500)}`,
+        error: ok ? undefined : `exit ${code}: ${stderr.slice(0, 500) || jsonError}`,
+        piSessionId,
+        sessionFile,
+        tokens: parsed.summary?.tokens,
       });
     });
   });

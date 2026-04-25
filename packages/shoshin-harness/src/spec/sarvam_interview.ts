@@ -8,10 +8,9 @@
 //   2. User types `/done` (host wraps up with whatever it has)
 //   3. Max turns reached (foundation-phase safety bound = 12)
 //
-// Each turn is one fresh dispatchSubagent call with the full
-// conversation history in the brief. Foundation-phase choice:
-// simpler than streaming, every turn independently debuggable,
-// trail captures each turn's full context.
+// Each turn is threaded through Pi's native session machinery. The local
+// transcript remains the audit log, but dispatch sends only the new turn so
+// prompt cost stays flat as interviews grow.
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import kleur from "kleur";
@@ -23,9 +22,9 @@ import { appendJsonl } from "../util/json-io.js";
 import { shoshinDir } from "../util/paths.js";
 import { join } from "node:path";
 
-// ─────────────────────────────────────────────────────────────────────
-// Language detection — script-based, deterministic, O(1)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
+// Language detection - script-based, deterministic, O(1)
+// ---------------------------------------------------------------------
 
 export type Language =
   | "en"     // English / Indian English
@@ -39,31 +38,31 @@ export type Language =
   | "pa";    // Punjabi (Gurmukhi)
 
 const SCRIPT_RANGES: { lang: Language; test: (s: string) => boolean }[] = [
-  { lang: "ta", test: (s) => /[஀-௿]/.test(s) },
-  { lang: "te", test: (s) => /[ఀ-౿]/.test(s) },
-  { lang: "kn", test: (s) => /[ಀ-೿]/.test(s) },
-  { lang: "bn", test: (s) => /[ঀ-৿]/.test(s) },
-  { lang: "gu", test: (s) => /[઀-૿]/.test(s) },
-  { lang: "pa", test: (s) => /[਀-੿]/.test(s) },
+  { lang: "ta", test: (s) => /[\u0B80-\u0BFF]/.test(s) },
+  { lang: "te", test: (s) => /[\u0C00-\u0C7F]/.test(s) },
+  { lang: "kn", test: (s) => /[\u0C80-\u0CFF]/.test(s) },
+  { lang: "bn", test: (s) => /[\u0980-\u09FF]/.test(s) },
+  { lang: "gu", test: (s) => /[\u0A80-\u0AFF]/.test(s) },
+  { lang: "pa", test: (s) => /[\u0A00-\u0A7F]/.test(s) },
 ];
 
 // Common Marathi-only function words / inflections that distinguish from Hindi.
 // (Both languages use Devanagari; this is a lexical disambiguator.)
 //
-// Note: regex \b doesn't work on Devanagari characters — \b only triggers on
+// Note: regex \b doesn't work on Devanagari characters; \b only triggers on
 // transitions between Latin word chars [A-Za-z0-9_] and non-word chars. So we
 // match these as plain substrings; false positives here are vanishingly rare
 // because these tokens are highly specific to Marathi morphology.
 const MARATHI_MARKERS = [
-  /आहे/,           // "is/are" (Marathi); Hindi uses है (hai). Catches आहे, आहेत.
-  /मला/,           // "to me" (Marathi); Hindi uses मुझे
-  /तुम्ही/,         // "you" (Marathi formal); Hindi uses आप
-  /काय/,           // "what" (Marathi); Hindi uses क्या
-  /आमच्या/,         // "our" (Marathi); Hindi uses हमारा
-  /माझ्या/,         // "my" (Marathi); Hindi uses मेरे
-  /गटा?/,          // "group/in-group" (Marathi); Hindi uses समूह
-  /बघा/,           // softener "look/see" (Marathi)
-  /करायचे/,         // "to do" (Marathi infinitive form); Hindi uses करना
+  "\u0906\u0939\u0947",
+  "\u092E\u0932\u093E",
+  "\u0924\u0941\u092E\u094D\u0939\u0940",
+  "\u0915\u093E\u092F",
+  "\u0906\u092E\u091A\u094D\u092F\u093E",
+  "\u092E\u093E\u091D\u094D\u092F\u093E",
+  "\u0917\u091F",
+  "\u092C\u0918\u093E",
+  "\u0915\u0930\u093E\u092F\u091A\u0947",
 ];
 
 export function detectLanguage(text: string): Language {
@@ -71,8 +70,8 @@ export function detectLanguage(text: string): Language {
     if (test(text)) return lang;
   }
   // Devanagari? Disambiguate Hindi vs Marathi.
-  if (/[ऀ-ॿ]/.test(text)) {
-    const marathiHits = MARATHI_MARKERS.filter((re) => re.test(text)).length;
+  if (/[\u0900-\u097F]/.test(text)) {
+    const marathiHits = MARATHI_MARKERS.filter((marker) => text.includes(marker)).length;
     return marathiHits >= 1 ? "mr" : "hi";
   }
   return "en";
@@ -80,7 +79,7 @@ export function detectLanguage(text: string): Language {
 
 const LANGUAGE_NAMES: Record<Language, string> = {
   en: "English (Indian English register is welcome)",
-  hi: "Hindi (Devanagari script; natural Hindi-English code-mixing is fine — do NOT force shudh Hindi)",
+  hi: "Hindi (Devanagari script; natural Hindi-English code-mixing is fine - do NOT force shudh Hindi)",
   mr: "Marathi (Devanagari script; warm conversational Marathi as a Marathi-speaking elder would use)",
   ta: "Tamil (Tamil script; natural Tamil-English code-mixing is fine)",
   te: "Telugu (Telugu script)",
@@ -90,9 +89,9 @@ const LANGUAGE_NAMES: Record<Language, string> = {
   pa: "Punjabi (Gurmukhi script)",
 };
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Conversation transcript types
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 export interface ConversationTurn {
   who: "host" | "user";
@@ -109,9 +108,9 @@ export interface DiscoveryResult {
   error?: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Brief construction — what we send the host on each turn
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
+// Brief construction - what we send the host on each turn
+// ---------------------------------------------------------------------
 
 const REQUIRED_FIELDS = [
   "name",
@@ -130,12 +129,7 @@ function buildTurnBrief(
   const langName = LANGUAGE_NAMES[language];
   const userTurnCount = transcript.filter((t) => t.who === "user").length;
 
-  const transcriptStr = transcript
-    .map((t) => {
-      const who = t.who === "host" ? "HOST" : "USER";
-      return `${who}: ${t.text}`;
-    })
-    .join("\n\n");
+  const latestUserTurn = [...transcript].reverse().find((t) => t.who === "user");
 
   const lines = [
     "You are conducting a warm discovery interview to build a ProjectSpec for a new app.",
@@ -154,7 +148,7 @@ function buildTurnBrief(
     "  - name             project slug (kebab-case; you propose, user confirms)",
     "  - oneLineGoal      one-sentence description of what the app does, for whom",
     "  - primaryUser      who will use this (plain language, the user's words)",
-    "  - primaryStack.lang  language: go | ts | py (suggest based on goal — for mobile/web, prefer 'ts')",
+    "  - primaryStack.lang  language: go | ts | py (suggest based on goal - for mobile/web, prefer 'ts')",
     "  - appShape         cli | desktop | web | api | mobile (infer from context)",
     "",
     "OPTIONAL FIELDS (ask only if naturally surfaced; don't interrogate):",
@@ -163,12 +157,15 @@ function buildTurnBrief(
     "  - targetLanguages  language codes the app should support (e.g. ['en','hi'])",
     "  - notes            anything the user wants captured",
     "",
-    "CONVERSATION SO FAR:",
-    transcriptStr || "(this is the first turn — open with a warm welcome)",
+    "SESSION CONTEXT:",
+    "The prior conversation is already present in the Pi session. Do not ask the user to repeat it.",
+    "",
+    "LATEST USER MESSAGE:",
+    latestUserTurn ? latestUserTurn.text : "(this is the first turn - open with a warm welcome)",
     "",
     `(${userTurnCount} user turn${userTurnCount === 1 ? "" : "s"} so far)`,
     "",
-    "─── YOUR TURN ───",
+    "--- YOUR TURN ---",
   ];
 
   if (retryUrgent) {
@@ -195,10 +192,10 @@ function buildTurnBrief(
     );
   } else if (isFinalTurn) {
     lines.push(
-      "FINAL TURN — the user signalled /done OR we have enough info to wrap up.",
+      "FINAL TURN - the user signalled /done OR we have enough info to wrap up.",
       "",
       "Do TWO things now:",
-      "1. A warm, brief, language-matched closing (1-2 sentences) — thank the user, name the project back to them.",
+      "1. A warm, brief, language-matched closing (1-2 sentences) - thank the user, name the project back to them.",
       "2. On a new line, output EXACTLY this marker followed by the full ProjectSpec JSON:",
       "",
       "<<<DISCOVERY_COMPLETE>>>",
@@ -215,7 +212,7 @@ function buildTurnBrief(
       "```",
       "",
       "The JSON keys are English (machine-readable). Free-text VALUES (oneLineGoal, primaryUser,",
-      "notes) keep the user's actual language — Marathi/Hindi/etc. — verbatim. Do NOT translate.",
+      "notes) keep the user's actual language - Marathi/Hindi/etc. - verbatim. Do NOT translate.",
       "",
       "If a required field is genuinely unclear, make a conservative best-guess and note it in 'notes'.",
       "DO NOT ask another question. The interview is closing.",
@@ -233,7 +230,7 @@ function buildTurnBrief(
       "Otherwise, ask ONE concrete question that surfaces the most important still-missing field.",
       "If the user's previous turn was vague, mirror it back and ask for one specific detail.",
       "If the user said something that LETS YOU INFER a field, name your inference back for confirmation",
-      "rather than re-asking (e.g. 'It sounds like this would run on Android — should I plan it as a mobile app?').",
+      "rather than re-asking (e.g. 'It sounds like this would run on Android - should I plan it as a mobile app?').",
       "",
       "If you ask a question, output ONLY the question in plain prose. No JSON, no markdown headers, no code blocks.",
     );
@@ -242,9 +239,9 @@ function buildTurnBrief(
   return lines.join("\n");
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Spec extraction from host response
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const COMPLETE_MARKER = "<<<DISCOVERY_COMPLETE>>>";
 
@@ -293,9 +290,9 @@ function tryParseSpec(jsonStr: string): { spec: ProjectSpec | null; error?: stri
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Stigmergy: append every turn to discovery_session.jsonl
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function logTurnToSession(
   cwd: string,
@@ -306,13 +303,13 @@ function logTurnToSession(
     const path = join(shoshinDir(cwd), "discovery_session.jsonl");
     appendJsonl(path, { ...turn, language });
   } catch {
-    // Best-effort logging — never break the interview on log failure.
+    // Best-effort logging - never break the interview on log failure.
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Main loop
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const MAX_TURNS = 12; // safety bound; usually completes in 4-7
 
@@ -338,7 +335,7 @@ export async function runSarvamInterview(
 
   console.log(
     kleur.cyan(
-      "\n🌱  Discovery — let's build your project together.\n" +
+      "\nDiscovery - let's build your project together.\n" +
         "    The host will ask one question at a time. Type /done when you want to wrap up.\n",
     ),
   );
@@ -362,9 +359,10 @@ export async function runSarvamInterview(
       const hostResult = await dispatchSubagent({
         role: "host",
         ticketBrief: brief,
-        spec: null, // no existing spec yet — that's what we're building
+        spec: null, // no existing spec yet - that's what we're building
         cwd: opts.cwd,
         timeoutMs: opts.timeoutMsPerTurn ?? 90_000,
+        sessionKey: "discovery-host",
       });
 
       if (!hostResult.ok) {
@@ -379,7 +377,7 @@ export async function runSarvamInterview(
         const ts = new Date().toISOString();
         transcript.push({ who: "host", text: hostMessage, ts });
         logTurnToSession(opts.cwd, { who: "host", text: hostMessage, ts }, language);
-        console.log(kleur.cyan("\n──── host ────\n"));
+        console.log(kleur.cyan("\n---- host ----\n"));
         console.log(hostMessage);
       }
 
@@ -392,13 +390,13 @@ export async function runSarvamInterview(
           result.turns = turnCount + 1;
           break;
         } else {
-          // Validation failed — surface and ask host to fix on next turn.
+          // Validation failed - surface and ask host to fix on next turn.
           console.log(
             kleur.yellow(
               `\n  (host emitted complete marker but spec failed validation: ${parsed.error})`,
             ),
           );
-          // Treat as an internal correction turn — append a synthetic user prompt
+          // Treat as an internal correction turn - append a synthetic user prompt
           // asking the host to retry with corrections.
           const correction: ConversationTurn = {
             who: "user",
@@ -415,18 +413,18 @@ export async function runSarvamInterview(
       if (useScripted) {
         const next = scriptIter!.next();
         if (next.done) {
-          // Out of scripted answers — request final close.
+          // Out of scripted answers - request final close.
           userText = "/done";
         } else {
           userText = next.value;
         }
       } else {
-        process.stdout.write(kleur.green("\n──── you (enter to send, /done to finish) ────\n"));
+        process.stdout.write(kleur.green("\n---- you (enter to send, /done to finish) ----\n"));
         userText = ((await rl!.question("> ")) ?? "").trim();
       }
 
       if (!userText) {
-        console.log(kleur.gray("(empty input — ending interview)"));
+        console.log(kleur.gray("(empty input - ending interview)"));
         result.reason = "user_done";
         break;
       }
@@ -437,7 +435,7 @@ export async function runSarvamInterview(
       logTrail({
         kind: "user_prompt",
         promptDigest:
-          userText.length > 200 ? `${userText.slice(0, 200)}…` : userText,
+          userText.length > 200 ? `${userText.slice(0, 200)}...` : userText,
       });
 
       // Detect language from the FIRST substantive user turn.
@@ -448,7 +446,7 @@ export async function runSarvamInterview(
         );
       }
 
-      // /done → push host into final-turn mode (one extra dispatch + one
+      // /done -> push host into final-turn mode (one extra dispatch + one
       // optional urgent-retry if the host fails to emit the marker).
       if (/^\/done$/i.test(userText.trim())) {
         const dispatchFinal = async (urgent: boolean) => {
@@ -459,6 +457,7 @@ export async function runSarvamInterview(
             spec: null,
             cwd: opts.cwd,
             timeoutMs: opts.timeoutMsPerTurn ?? 90_000,
+            sessionKey: "discovery-host",
           });
         };
 
@@ -472,9 +471,9 @@ export async function runSarvamInterview(
               text: hm,
               ts: new Date().toISOString(),
             });
-            // Only print on first (warm) attempt — second attempt is mechanical retry.
+            // Only print on first (warm) attempt - second attempt is mechanical retry.
             if (attempt === 0) {
-              console.log(kleur.cyan("\n──── host ────\n"));
+              console.log(kleur.cyan("\n---- host ----\n"));
               console.log(hm);
             }
           }
@@ -497,7 +496,7 @@ export async function runSarvamInterview(
       }
 
       // 4. Update draft spec from accumulated context. We don't try to parse
-      //    fields out of the user's prose ourselves — we trust the host to
+      //    fields out of the user's prose ourselves - we trust the host to
       //    accumulate them in the next emitted JSON. The draft spec is a
       //    HINT to the host about what's missing; the authoritative spec
       //    comes from the final marker emission.

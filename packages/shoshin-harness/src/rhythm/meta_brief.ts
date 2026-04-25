@@ -22,6 +22,7 @@ export interface MetaBriefOptions {
 }
 
 const VERB_FOR_ROLE: Record<RoleName, string> = {
+  host: "Clarify",
   scout: "Discover",
   builder: "Implement",
   qa: "Verify",
