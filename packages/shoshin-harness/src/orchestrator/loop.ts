@@ -129,7 +129,17 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       sessionKey: `${sessionBase}-${opts.role}`,
     });
 
-    if (!dispatch.ok || !opts.proposedAdvance) {
+    if (!dispatch.ok) {
+      const scopeReason = scopeViolationFailureReport(dispatch, opts);
+      if (scopeReason && attempt < maxRepairAttempts && opts.role === "builder") {
+        Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, scopeReason);
+        currentBrief = repairBrief(brief, scopeReason, attempt + 1);
+        continue;
+      }
+      return { dispatch, advanced, newState };
+    }
+
+    if (!opts.proposedAdvance) {
       return { dispatch, advanced, newState };
     }
 
@@ -138,6 +148,9 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       let mutationGate: MutationGateResult | undefined;
       if (mutationSnapshot) {
         mutationGate = compareMutationSnapshot(mutationSnapshot);
+        if (mutationGate.ok && opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE") {
+          mutationGate = requireImplementationMutation(mutationGate);
+        }
         lastMutationGate = mutationGate;
         Trail.mutationGate(
           refreshed.id,
@@ -265,8 +278,24 @@ function repairBrief(originalBrief: string, reason: string, attempt: number): st
     "Your previous attempt was blocked by the harness quality gates.",
     "Fix only the issues below. Do not restart from scratch if a scoped artifact already exists.",
     "Read the relevant file first, make the smallest targeted edit, then verify again.",
+    "Preserve the user's intent, but obey the current capability envelope exactly.",
     "",
     reason,
+  ].join("\n");
+}
+
+function scopeViolationFailureReport(dispatch: DispatchResult, opts: RunTicketOptions): string | null {
+  const text = `${dispatch.error ?? ""}\n${dispatch.output ?? ""}`;
+  if (!/Blocked (unsafe )?mutation path/i.test(text)) return null;
+  const blocked = text.match(/Blocked (?:unsafe )?mutation path "([^"]+)"/i)?.[1] ?? "(unknown)";
+  const scope = opts.feature.scopePath ?? "(none)";
+  return [
+    "Gate: mutation_scope",
+    `Blocked path: ${blocked}`,
+    `Allowed scope: ${scope}`,
+    "The previous attempt tried to write outside the feature scope.",
+    "Repair instruction: implement only the scoped package/artifact. Do not create CLI wiring, app entrypoints, tests, docs, or config outside the allowed scope.",
+    "If the original request implies outside-scope wiring, leave that as a note in the final response instead of editing outside scope.",
   ].join("\n");
 }
 
@@ -276,7 +305,37 @@ function mutationGateFailureReport(result: MutationGateResult): string {
     `Root: ${result.root}`,
     `Reason: ${result.reason ?? "no scoped mutation detected"}`,
     result.changedFiles.length ? `Changed files: ${result.changedFiles.join(", ")}` : "Changed files: none",
+    "Repair instruction: create or edit the required implementation file inside the root above. Do not only describe the implementation.",
+    "Do not create entrypoints, tests, docs, config, or CLI wiring outside the feature scope.",
+    "Use only the exact available tool names from the prompt, such as read/write/edit/bash; do not call capability names as tools.",
   ].join("\n");
+}
+
+function requireImplementationMutation(result: MutationGateResult): MutationGateResult {
+  const implementationFiles = result.changedFiles.filter((file) => !isSupportOnlyFile(file));
+  if (implementationFiles.length > 0) return result;
+  return {
+    ...result,
+    ok: false,
+    reason:
+      "Builder changed only tests/docs/config or support files; MODEL_DONE requires at least one implementation artifact in scope",
+  };
+}
+
+function isSupportOnlyFile(file: string): boolean {
+  const normalized = file.replace(/\\/g, "/").toLowerCase();
+  return (
+    normalized.endsWith("_test.go") ||
+    normalized.endsWith(".test.ts") ||
+    normalized.endsWith(".test.tsx") ||
+    normalized.endsWith(".spec.ts") ||
+    normalized.endsWith(".spec.tsx") ||
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".txt") ||
+    normalized.endsWith(".json") ||
+    normalized.endsWith(".yaml") ||
+    normalized.endsWith(".yml")
+  );
 }
 
 function htmlStaticGateFailureReport(result: HtmlStaticGateResult): string {
