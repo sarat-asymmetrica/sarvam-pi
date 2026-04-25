@@ -239,7 +239,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           previousBehaviorFailureSnapshot = currentBehaviorFailureSnapshot;
           if (attempt < repairBudget && opts.role === "builder") {
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, reason);
-            currentBrief = repairBrief(brief, reason, attempt + 1);
+            currentBrief = browserRepairBrief(brief, reason, attempt + 1, refreshed.scopePath);
             continue;
           }
           if (opts.role === "builder" && behaviorProgress && repairBudget < hardRepairBudget) {
@@ -251,7 +251,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
               `Repair budget is now ${repairBudget} of hard cap ${hardRepairBudget}.`,
             ].join("\n");
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, adaptiveReason);
-            currentBrief = repairBrief(brief, adaptiveReason, attempt + 1);
+            currentBrief = browserRepairBrief(brief, adaptiveReason, attempt + 1, refreshed.scopePath);
             continue;
           }
           return { dispatch, advanced: false, mutationGate, htmlStaticGate, htmlBehaviorGate };
@@ -340,6 +340,31 @@ function repairBrief(originalBrief: string, reason: string, attempt: number): st
     "Fix only the issues below. Do not restart from scratch if a scoped artifact already exists.",
     "Read the relevant file first, make the smallest targeted edit, then verify again.",
     "Preserve the user's intent, but obey the current capability envelope exactly.",
+    "",
+    reason,
+  ].join("\n");
+}
+
+export function browserRepairBrief(
+  originalBrief: string,
+  reason: string,
+  attempt: number,
+  scopePath?: string,
+): string {
+  return [
+    originalBrief,
+    "",
+    `=== Browser repair attempt ${attempt} ===`,
+    "Your previous attempt was blocked by the deterministic browser behavior gate.",
+    "This is a debugging task, not a rewrite task. Preserve the existing app and patch only the broken interaction path.",
+    "",
+    "Mandatory repair protocol:",
+    `1. Read the current HTML file first (${scopePath ? `${scopePath.replace(/\\$/, "/")}index.html` : "the scoped index.html"}).`,
+    "2. Identify the exact event path: control selector -> event listener -> state update -> render call -> localStorage write/read.",
+    "3. State the most likely failing line or expression before editing.",
+    "4. Make the smallest targeted edit to that event/listener/render/persistence path.",
+    "5. Do not redesign the UI, rename unrelated selectors, add dependencies, start servers, or use network commands.",
+    "6. Final response must name the patched path and why the browser assertion should now pass.",
     "",
     reason,
   ].join("\n");

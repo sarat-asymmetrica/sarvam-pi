@@ -15,6 +15,7 @@ writeFileSync(
   DRIVER,
   [
     'import { htmlBehaviorGateFailureReport } from "../../packages/shoshin-harness/src/orchestrator/loop.js";',
+    'import { browserRepairBrief } from "../../packages/shoshin-harness/src/orchestrator/loop.js";',
     'const report = htmlBehaviorGateFailureReport({',
     '  ok: false,',
     '  status: "failed",',
@@ -33,6 +34,10 @@ writeFileSync(
     '  output: "AssertionError: Missing selector: #unitPrice | [name=\'unitPrice\']",',
     '});',
     'if (!selectorReport.includes("stable ids/names")) throw new Error(selectorReport);',
+    'const repairBrief = browserRepairBrief("Original task", report, 2, "app/");',
+    'for (const needle of ["Browser repair attempt 2", "Read the current HTML file first (app/index.html)", "control selector -> event listener -> state update -> render call -> localStorage", "State the most likely failing line", "Do not redesign the UI"]) {',
+    '  if (!repairBrief.includes(needle)) throw new Error(`missing browser repair protocol: ${needle}\\n${repairBrief}`);',
+    '}',
   ].join("\n"),
   "utf8",
 );
