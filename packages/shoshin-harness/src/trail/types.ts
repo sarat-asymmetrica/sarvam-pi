@@ -145,7 +145,7 @@ export interface TrailBrowserCheck extends TrailRecordBase {
 
 export interface TrailProcessHygiene extends TrailRecordBase {
   kind: "process_hygiene";
-  action: "timeout_kill" | "long_lived_command_detected";
+  action: "timeout_kill" | "long_lived_command_detected" | "tool_echo_synthesis";
   pid: number | null;
   command: string | null;
   durationMs: number;

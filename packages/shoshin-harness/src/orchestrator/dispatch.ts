@@ -26,6 +26,7 @@ export interface DispatchOptions {
   timeoutMs?: number;
   extraSystemPromptHints?: string[];
   sessionKey?: string;
+  synthesisOnly?: boolean;
 }
 
 export interface ProcessDispatchOptions {
@@ -143,7 +144,7 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     scopePath: opts.scopePath,
     cwd: opts.cwd,
   });
-  const plan = toPiPlan(env);
+  const plan = opts.synthesisOnly ? { toolsArg: "", envOverrides: {} } : toPiPlan(env);
 
   const memBundle = hydrateMemory({ cwd: opts.cwd, spec: opts.spec });
   const pulse = currentPulse(opts.cwd);
@@ -184,6 +185,9 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     "- Complete this in print mode.",
     "- Do not wait for user input.",
     "- Do not start an interactive conversation.",
+    opts.synthesisOnly
+      ? "- Tool use is closed for this follow-up. Produce a normal final answer from the existing session context."
+      : "- Use tools only when needed, then synthesize a normal final answer.",
     "- Once you have enough context, stop using tools and provide the final answer.",
     "",
     `=== Ticket ===`,
@@ -260,7 +264,7 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
         error: err.message,
       });
     });
-    child.on("close", (code) => {
+    child.on("close", async (code) => {
       clearTimeout(timeout);
       const elapsed = Date.now() - startedAt;
       const ok = code === 0;
@@ -273,6 +277,42 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
       }
       const digest = trimmed.length > 200 ? `${trimmed.slice(0, 200)}…` : trimmed;
       if (ok) {
+        if (!opts.synthesisOnly && isToolCallEcho(trimmed) && opts.sessionKey) {
+          Trail.processHygiene(
+            "tool_echo_synthesis",
+            child.pid ?? null,
+            opts.role,
+            elapsed,
+            "Pi print-mode returned a tool-call echo as the final answer; requesting same-session no-tools synthesis",
+          );
+          const synthesis = await dispatchSubagent({
+            ...opts,
+            ticketBrief: synthesisBrief(opts.ticketBrief, trimmed),
+            synthesisOnly: true,
+          });
+          resolveOuter({
+            ...synthesis,
+            durationMs: elapsed + synthesis.durationMs,
+            piSessionId: synthesis.piSessionId ?? piSessionId,
+            sessionFile: synthesis.sessionFile ?? sessionFile,
+            tokens: synthesis.tokens ?? parsed.summary?.tokens,
+          });
+          return;
+        }
+        if (opts.synthesisOnly && isToolCallEcho(trimmed)) {
+          Trail.failed(opts.role, "tool-call echo remained after synthesis pass");
+          resolveOuter({
+            ok: false,
+            output: trimmed,
+            durationMs: elapsed,
+            exitCode: code,
+            error: "tool-call echo remained after synthesis pass",
+            piSessionId,
+            sessionFile,
+            tokens: parsed.summary?.tokens,
+          });
+          return;
+        }
         Trail.complete(opts.role, elapsed, digest);
         if (parsed.summary?.tokens) {
           Trail.sessionSummary(
@@ -300,6 +340,27 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
       });
     });
   });
+}
+
+export function isToolCallEcho(output: string): boolean {
+  const text = output.trim();
+  if (!text) return false;
+  return /^Called tool [A-Za-z0-9_-]+ with arguments [\s\S]+\.?$/i.test(text);
+}
+
+function synthesisBrief(originalBrief: string, toolEcho: string): string {
+  return [
+    "The previous turn executed a tool but returned only a tool-call echo instead of a final answer.",
+    "Do not call any tools in this follow-up.",
+    "Read the existing session context and synthesize a normal final response.",
+    "Include changed files and verification if they are known from the previous turn.",
+    "",
+    "Original ticket:",
+    originalBrief,
+    "",
+    "Previous tool-call echo:",
+    toolEcho.slice(0, 2000),
+  ].join("\n");
 }
 
 export async function dispatchProcessForTest(opts: ProcessDispatchOptions): Promise<DispatchResult> {

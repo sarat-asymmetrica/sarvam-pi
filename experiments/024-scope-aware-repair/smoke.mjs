@@ -125,6 +125,9 @@ step("Run Builder with tempting out-of-scope wiring", () => {
   if (feature?.state === "MODEL_DONE" && inScopeFiles.length === 0) {
     fail("feature advanced without an in-scope Go file");
   }
+  if (feature?.state === "MODEL_DONE" && /^Called tool /i.test(String(feature?.evidence ?? "").trim())) {
+    fail("feature advanced with a tool-call echo as evidence");
+  }
   return [
     `  dispatch status: ${r.status}`,
     `  scope-aware repair attempts: ${scopeRepairs.length}`,

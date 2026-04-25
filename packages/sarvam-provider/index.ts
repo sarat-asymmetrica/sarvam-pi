@@ -25,6 +25,15 @@ const MUTATION_TOOL_RESULT_LIMIT = 4;
 const STATE_TOOL_RESULT_LIMIT = 8;
 const DEFAULT_MUTATION_ROOT = "experiments/002-tool-loop-smoke/fixture/";
 const MUTATING_TOOLS = new Set(["edit", "write"]);
+const LONG_LIVED_BASH_PATTERNS = [
+	/\bpython(?:3)?\s+-m\s+http\.server\b/i,
+	/\bnpm\s+run\s+dev\b/i,
+	/\bnpm\s+start\b/i,
+	/\bnpx\s+vite\b/i,
+	/\bvite\s+(?:--host\b|--port\b|$)/i,
+	/\bnext\s+dev\b/i,
+	/\bserve\s+(?:-s\s+)?\S+/i,
+];
 
 function textFromContent(content: any): string {
 	if (typeof content === "string") {
@@ -402,6 +411,10 @@ function isSensitiveMutationPath(path: string): boolean {
 }
 
 function validateToolCall(toolCall: ToolCall): void {
+	if (toolCall.name === "bash") {
+		validateBashToolCall(toolCall);
+		return;
+	}
 	if (!MUTATING_TOOLS.has(toolCall.name)) {
 		return;
 	}
@@ -427,6 +440,18 @@ function validateToolCall(toolCall: ToolCall): void {
 	if (!isInsideRoot) {
 		throw new Error(
 			`Blocked mutation path "${path}". Current mutation scope is "${root}". Set SARVAM_PI_MUTATION_ROOT to change the scope or SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1 to disable this guard.`,
+		);
+	}
+}
+
+function validateBashToolCall(toolCall: ToolCall): void {
+	const command = typeof toolCall.arguments?.command === "string" ? toolCall.arguments.command : "";
+	if (!command) {
+		throw new Error('Bash tool requires a "command" argument.');
+	}
+	if (LONG_LIVED_BASH_PATTERNS.some((pattern) => pattern.test(command))) {
+		throw new Error(
+			`Blocked long-lived bash command "${command}". Use one-shot checks that terminate; do not start dev servers or background HTTP servers in Builder dispatches.`,
 		);
 	}
 }

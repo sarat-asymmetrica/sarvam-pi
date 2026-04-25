@@ -159,6 +159,12 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         currentBrief = repairBrief(brief, toolReason, attempt + 1);
         continue;
       }
+      const processReason = longLivedCommandFailureReport(dispatch);
+      if (processReason && attempt < maxRepairAttempts && opts.role === "builder") {
+        Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, processReason);
+        currentBrief = repairBrief(brief, processReason, attempt + 1);
+        continue;
+      }
       return { dispatch, advanced, newState };
     }
 
@@ -335,6 +341,19 @@ function unavailableToolFailureReport(dispatch: DispatchResult): string | null {
     `Repair instruction: retry using only these exact tool names: ${available}.`,
     "If write, edit, or bash are not in the available-tools list, do not call them.",
     "Do not call bashcap, readcap, grepcap, or other capability names as tools.",
+  ].join("\n");
+}
+
+function longLivedCommandFailureReport(dispatch: DispatchResult): string | null {
+  const text = `${dispatch.error ?? ""}\n${dispatch.output ?? ""}`;
+  const match = text.match(/Blocked long-lived bash command "([^"]+)"/i);
+  if (!match) return null;
+  return [
+    "Gate: process_hygiene",
+    `Blocked command: ${match[1]}`,
+    "The previous attempt tried to start a long-lived server or background process.",
+    "Repair instruction: verify with one-shot checks that terminate, such as reading the file, running a compiler, or using a deterministic test command.",
+    "For static HTML, do not start an HTTP server. The harness will run deterministic browser checks after the Builder returns.",
   ].join("\n");
 }
 
