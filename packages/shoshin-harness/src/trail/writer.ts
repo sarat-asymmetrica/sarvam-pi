@@ -163,6 +163,22 @@ export const Trail = {
       outputDigest,
     });
   },
+  processHygiene(
+    action: "timeout_kill" | "long_lived_command_detected",
+    pid: number | null,
+    command: string | null,
+    durationMs: number,
+    reason: string,
+  ): void {
+    logTrail({
+      kind: "process_hygiene",
+      action,
+      pid,
+      command,
+      durationMs,
+      reason,
+    });
+  },
   pulse(
     sessionTurns: number,
     elapsedMs: number,

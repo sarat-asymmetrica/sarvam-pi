@@ -67,6 +67,8 @@ function kindColor(kind: TrailKind): (s: string) => string {
       return kleur.yellow;
     case "browser_check":
       return kleur.cyan;
+    case "process_hygiene":
+      return kleur.yellow;
     case "feature_advance":
       return kleur.magenta;
     case "spec_written":
@@ -113,6 +115,8 @@ function oneLineDigest(r: TrailRecord): string {
       return `${r.feature}: ${r.role} repair ${r.attempt}/${r.maxAttempts} - ${r.reason.slice(0, 80)}`;
     case "browser_check":
       return `${r.feature ?? "-"}: ${r.engine} ${r.status} - ${r.task.slice(0, 60)}`;
+    case "process_hygiene":
+      return `${r.action}: pid=${r.pid ?? "-"} ${r.reason}`;
     case "tool_call":
       return `${r.tool}(${r.argsDigest.slice(0, 80)})`;
     case "user_prompt":

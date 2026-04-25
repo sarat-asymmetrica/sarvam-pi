@@ -28,6 +28,14 @@ export interface DispatchOptions {
   sessionKey?: string;
 }
 
+export interface ProcessDispatchOptions {
+  command: string;
+  args: string[];
+  cwd: string;
+  timeoutMs: number;
+  role?: RoleName;
+}
+
 export interface DispatchTokens {
   input: number;
   output: number;
@@ -214,6 +222,13 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     let stderr = "";
     const timeoutMs = opts.timeoutMs ?? 240_000;
     const timeout = setTimeout(() => {
+      Trail.processHygiene(
+        "timeout_kill",
+        child.pid ?? null,
+        [process.execPath, ...args].join(" "),
+        Date.now() - startedAt,
+        `dispatch timed out after ${timeoutMs}ms`,
+      );
       killProcessTree(child.pid);
       const elapsed = Date.now() - startedAt;
       Trail.failed(opts.role, `timeout after ${timeoutMs}ms`);
@@ -280,6 +295,63 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
         piSessionId,
         sessionFile,
         tokens: parsed.summary?.tokens,
+      });
+    });
+  });
+}
+
+export async function dispatchProcessForTest(opts: ProcessDispatchOptions): Promise<DispatchResult> {
+  const startedAt = Date.now();
+  return new Promise<DispatchResult>((resolveOuter) => {
+    const child = spawn(opts.command, opts.args, {
+      cwd: opts.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    const commandText = [opts.command, ...opts.args].join(" ");
+    const timeout = setTimeout(() => {
+      Trail.processHygiene(
+        "timeout_kill",
+        child.pid ?? null,
+        commandText,
+        Date.now() - startedAt,
+        `test process timed out after ${opts.timeoutMs}ms`,
+      );
+      killProcessTree(child.pid);
+      resolveOuter({
+        ok: false,
+        output: stdout || "[no output]",
+        durationMs: Date.now() - startedAt,
+        exitCode: null,
+        error: `timed out after ${opts.timeoutMs}ms`,
+      });
+    }, opts.timeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) => {
+      clearTimeout(timeout);
+      resolveOuter({
+        ok: false,
+        output: stdout,
+        durationMs: Date.now() - startedAt,
+        exitCode: null,
+        error: err.message,
+      });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolveOuter({
+        ok: code === 0,
+        output: stdout.trim(),
+        durationMs: Date.now() - startedAt,
+        exitCode: code,
+        error: code === 0 ? undefined : stderr.slice(0, 500),
       });
     });
   });
