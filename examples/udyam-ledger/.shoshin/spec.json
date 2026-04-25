@@ -1,0 +1,29 @@
+{
+  "name": "udyam-ledger",
+  "oneLineGoal": "Tiny CLI for shopkeepers to log daily sales and print weekly summaries in Hindi/English.",
+  "primaryUser": "small shopkeeper / kirana store owner",
+  "targetLanguages": [
+    "en",
+    "hi"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "cli",
+  "primaryStack": {
+    "lang": "go"
+  },
+  "surfaces": [
+    "cli"
+  ],
+  "mathPrimitives": [
+    "digital_root",
+    "regime_classifier"
+  ],
+  "doneInvariants": [
+    "correct",
+    "tested",
+    "observable"
+  ],
+  "notes": "Sales logged to sales.jsonl. Weekly summary classifies the week as calm/busy/peak based on DR(total_paise). Bilingual output: Hindi greeting + English numbers + Hindi farewell.",
+  "source": "imported",
+  "createdAt": "2026-04-25T02:13:32.153Z"
+}

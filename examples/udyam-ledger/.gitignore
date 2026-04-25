@@ -1,0 +1,13 @@
+# Shoshin rotated trail logs
+.shoshin/trail-*.jsonl
+
+# Build artifacts
+udyam-ledger
+udyam-ledger.exe
+
+# Runtime data (the live shopkeeper's ledger — would never be in git)
+sales.jsonl
+weekly_export.csv
+
+# Tickets file is regenerated each morning; trail.jsonl captures history
+.shoshin/tickets.json

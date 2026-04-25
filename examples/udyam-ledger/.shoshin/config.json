@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "shoshinVersion": "0.1.0-foundation",
+  "projectName": "udyam-ledger",
+  "maxParallelSubagents": 3,
+  "pulseEveryTurns": 3,
+  "defaultModel": "sarvam-105b"
+}

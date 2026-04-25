@@ -13,3 +13,13 @@ coverage/
 *.log
 *.tmp
 *.bak
+
+# Smoke-test fixtures (per-run state, regenerated each smoke run)
+experiments/*/fixture/
+
+# Demo runtime artifacts (build output, live ledgers)
+examples/*/sales.jsonl
+examples/*/weekly_export.csv
+examples/*/udyam-ledger
+examples/*/udyam-ledger.exe
+examples/*/.shoshin/tickets.json

@@ -89,8 +89,13 @@ program
 program
   .command("morning")
   .description("Plan-of-day flow: generate today's tickets and brief Sarvam.")
-  .action(async () => {
-    await runMorning();
+  .option(
+    "--no-sarvam-briefs",
+    "skip PM-driven brief generation; use template briefs only",
+  )
+  .action(async (opts) => {
+    // commander negates --no-sarvam-briefs into opts.sarvamBriefs = false
+    await runMorning({ sarvamBriefs: opts.sarvamBriefs });
   });
 
 program
