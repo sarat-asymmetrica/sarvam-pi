@@ -20,6 +20,7 @@ import {
   MutationGateResult,
   snapshotScope,
 } from "./mutation-gate.js";
+import { runHtmlStaticGate, HtmlStaticGateResult } from "./html-static-gate.js";
 import { Trail } from "../trail/writer.js";
 
 export interface RunTicketOptions {
@@ -37,6 +38,7 @@ export interface RunTicketResult {
   newState?: FeatureState;
   compileGate?: CompileGateResult;
   mutationGate?: MutationGateResult;
+  htmlStaticGate?: HtmlStaticGateResult;
 }
 
 export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult> {
@@ -53,12 +55,10 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 
   const sessionBase = `feature-${opts.feature.id}`;
   let brief = opts.brief;
-  const mutationSnapshot =
-    opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE"
-      ? snapshotScope(opts.cwd, opts.feature.scopePath)
-      : null;
+  let mutationSnapshot: ReturnType<typeof snapshotScope> | null = null;
 
   if (opts.role === "builder") {
+    const architectSnapshot = snapshotScope(opts.cwd, opts.feature.scopePath);
     const architect = await dispatchSubagent({
       role: "architect",
       ticketBrief: [
@@ -78,6 +78,18 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       return { dispatch: architect, advanced: false };
     }
 
+    const architectMutation = compareMutationSnapshot(architectSnapshot);
+    if (architectMutation.ok) {
+      Trail.mutationGate(
+        opts.feature.id,
+        "failed",
+        architectMutation.root,
+        architectMutation.changedFiles,
+        "Architect mutated files during read-only planning pass",
+      );
+      return { dispatch: architect, advanced: false, mutationGate: architectMutation };
+    }
+
     brief = [
       opts.brief,
       "",
@@ -86,6 +98,10 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       "",
       "Use the plan as guidance, but verify against the actual files before editing.",
     ].join("\n");
+
+    if (opts.proposedAdvance === "MODEL_DONE") {
+      mutationSnapshot = snapshotScope(opts.cwd, opts.feature.scopePath);
+    }
   }
 
   const dispatch = await dispatchSubagent({
@@ -118,6 +134,21 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           return { dispatch, advanced: false, mutationGate };
         }
       }
+      let htmlStaticGate: HtmlStaticGateResult | undefined;
+      if (opts.proposedAdvance === "MODEL_DONE") {
+        htmlStaticGate = runHtmlStaticGate(opts.cwd, refreshed.scopePath, spec);
+        Trail.htmlStaticGate(
+          refreshed.id,
+          htmlStaticGate.status,
+          htmlStaticGate.root,
+          htmlStaticGate.filesChecked,
+          htmlStaticGate.issues.map((issue) => `${issue.file}:${issue.code}:${issue.message}`),
+          htmlStaticGate.reason ?? null,
+        );
+        if (!htmlStaticGate.ok) {
+          return { dispatch, advanced: false, mutationGate, htmlStaticGate };
+        }
+      }
       let compileGate: CompileGateResult | undefined;
       if (opts.proposedAdvance === "VERIFIED") {
         compileGate = runCompileOrImportGate({
@@ -136,7 +167,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           `${compileGate.stdout}\n${compileGate.stderr}`.trim().slice(0, 500),
         );
         if (!compileGate.ok) {
-          return { dispatch, advanced: false, compileGate, mutationGate };
+          return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate };
         }
       }
       const result = advanceFeature(refreshed, {
@@ -148,7 +179,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         advanced = true;
         newState = opts.proposedAdvance;
       }
-      return { dispatch, advanced, newState, compileGate, mutationGate };
+      return { dispatch, advanced, newState, compileGate, mutationGate, htmlStaticGate };
     }
   }
 

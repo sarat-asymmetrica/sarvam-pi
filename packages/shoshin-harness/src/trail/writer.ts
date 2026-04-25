@@ -108,6 +108,25 @@ export const Trail = {
       reason,
     });
   },
+  htmlStaticGate(
+    feature: string,
+    status: "passed" | "failed" | "skipped",
+    root: string,
+    filesChecked: number,
+    issues: string[],
+    reason: string | null,
+  ): void {
+    logTrail({
+      kind: "html_static_gate",
+      feature,
+      status,
+      root,
+      filesChecked,
+      issueCount: issues.length,
+      issues,
+      reason,
+    });
+  },
   pulse(
     sessionTurns: number,
     elapsedMs: number,

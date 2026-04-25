@@ -99,7 +99,7 @@ export async function runDispatch(
   } else if (advance) {
     console.log(kleur.yellow(`✗ Feature did NOT advance (dispatch ok=${r.dispatch.ok})`));
   }
-  process.exit(r.dispatch.ok ? 0 : 1);
+  process.exit(r.dispatch.ok && (!advance || r.advanced) ? 0 : 1);
 }
 
 function defaultBrief(role: RoleName, featureId: string, featureName: string): string {

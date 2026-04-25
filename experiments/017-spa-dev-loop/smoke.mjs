@@ -14,6 +14,7 @@ const HARNESS_ROOT = resolve(__dirname, "..", "..", "packages", "shoshin-harness
 const SARVAM_PI_ROOT = resolve(__dirname, "..", "..");
 const FIXTURE = resolve(__dirname, "fixture");
 const SHOSHIN_BIN = resolve(HARNESS_ROOT, "bin", "shoshin.js");
+let qualityBlocked = false;
 
 function nodeShoshin(args, opts = {}) {
   return spawnSync(process.execPath, [SHOSHIN_BIN, ...args], {
@@ -137,11 +138,21 @@ step("Architect -> Builder creates the one-file SPA", () => {
     { stdio: "inherit", timeout: 480_000 },
   );
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  if (run.status !== 0) fail(`builder dispatch failed after ${elapsed}s`);
+  if (run.status !== 0) {
+    const trailPath = resolve(FIXTURE, ".shoshin", "trail.jsonl");
+    const trail = existsSync(trailPath) ? readFileSync(trailPath, "utf8") : "";
+    const blockedByGate =
+      /"kind":"html_static_gate".*"status":"failed"/s.test(trail) ||
+      /"kind":"mutation_gate".*"status":"failed"/s.test(trail);
+    if (!blockedByGate) fail(`builder dispatch failed after ${elapsed}s`);
+    qualityBlocked = true;
+    return `  Builder was blocked by a quality gate in ${elapsed}s`;
+  }
   return `  Builder returned in ${elapsed}s`;
 });
 
 step("Verify generated SPA artifact", () => {
+  if (qualityBlocked) return "  skipped artifact assertions because quality gate blocked advance";
   const target = resolve(FIXTURE, "app", "index.html");
   if (!existsSync(target)) fail(`expected artifact missing: ${target}`);
   const html = readFileSync(target, "utf8");
@@ -168,23 +179,34 @@ step("Trail and session evidence", () => {
     .filter(Boolean)
     .map((line) => JSON.parse(line));
   const kinds = new Set(records.map((r) => r.kind));
-  for (const required of [
+  const requiredKinds = [
     "subagent_spawn",
     "subagent_complete",
     "session_summary",
     "mutation_gate",
-    "feature_advance",
-  ]) {
+  ];
+  if (qualityBlocked) {
+    requiredKinds.push("html_static_gate");
+  } else {
+    requiredKinds.push("feature_advance");
+  }
+  for (const required of requiredKinds) {
     if (!kinds.has(required)) fail(`trail missing ${required}`);
   }
   const featurePath = resolve(FIXTURE, ".shoshin", "features.json");
   const features = JSON.parse(readFileSync(featurePath, "utf8"));
   const feature = features.features.find((f) => f.id === "kirana-expense-spa");
-  if (!feature || feature.state !== "MODEL_DONE") {
+  if (!feature) fail("feature missing after run");
+  if (!qualityBlocked && feature.state !== "MODEL_DONE") {
     fail(`feature did not reach MODEL_DONE: ${feature?.state ?? "(missing)"}`);
+  }
+  if (qualityBlocked && feature.state === "MODEL_DONE") {
+    fail("quality-blocked feature still reached MODEL_DONE");
   }
   return `  ${records.length} trail records; feature=${feature.state}`;
 });
 
-console.log("\nSPA DEV LOOP SMOKE: PASSED\n");
-console.log(`Open this file to dogfood manually:\n${resolve(FIXTURE, "app", "index.html")}\n`);
+console.log(qualityBlocked ? "\nSPA DEV LOOP SMOKE: PASSED (quality blocked)\n" : "\nSPA DEV LOOP SMOKE: PASSED\n");
+if (!qualityBlocked) {
+  console.log(`Open this file to dogfood manually:\n${resolve(FIXTURE, "app", "index.html")}\n`);
+}

@@ -88,7 +88,7 @@ export async function runRun(opts: RunOpts): Promise<void> {
     ticket.durationMs = result.dispatch.durationMs;
     ticket.outputDigest = result.dispatch.output.slice(0, 200);
 
-    if (result.dispatch.ok) {
+    if (result.dispatch.ok && (!ticket.proposedAdvance || result.advanced)) {
       ticket.status = "completed";
       if (result.advanced) {
         advanced++;
@@ -103,7 +103,12 @@ export async function runRun(opts: RunOpts): Promise<void> {
       ticket.status = "blocked";
       blocked++;
       console.log(
-        kleur.red(`     ✗ ${result.dispatch.error?.slice(0, 100) ?? "failed"}`),
+        kleur.red(
+          `     ✗ ${
+            result.dispatch.error?.slice(0, 100) ??
+            (ticket.proposedAdvance ? `advance to ${ticket.proposedAdvance} blocked` : "failed")
+          }`,
+        ),
       );
     }
     writeTickets(file, cwd);
