@@ -44,6 +44,20 @@ export function runBrowserUseCheck(opts: BrowserUseCheckOptions): BrowserUseChec
     return result;
   }
 
+  if (!process.env.BROWSER_USE_API_KEY) {
+    const result: BrowserUseCheckResult = {
+      ok: !opts.requireInstalled,
+      status: opts.requireInstalled ? "failed" : "skipped",
+      engine: "browser-use",
+      durationMs: Date.now() - started,
+      output: probe.stdout.trim(),
+      error:
+        "browser-use is installed, but BROWSER_USE_API_KEY is not set for ChatBrowserUse.",
+    };
+    writeTrail(opts, result);
+    return result;
+  }
+
   const script = [
     "import asyncio, os",
     "from browser_use import Agent, Browser, ChatBrowserUse",

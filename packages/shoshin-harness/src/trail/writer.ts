@@ -146,7 +146,7 @@ export const Trail = {
   browserCheck(
     feature: string | undefined,
     status: "passed" | "failed" | "skipped",
-    engine: "browser-use",
+    engine: "browser-use" | "playwright",
     task: string,
     durationMs: number,
     reason: string | null,

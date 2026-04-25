@@ -145,6 +145,7 @@ export const ROLE_CATALOG: Record<RoleName, RoleDef> = {
       "- Changed files: every path you created or edited",
       "- Verification: the exact command/check you ran and whether it passed",
       "- If you could not mutate files, say BLOCKED and name the missing capability or failing command",
+      "- Do not start long-lived dev servers or background processes for verification. Use one-shot checks that terminate.",
       "",
       "Before declaring the ticket done, write a brief ELEGANCE_CHECK as plain text in your final message:",
       "",

@@ -21,6 +21,7 @@ import {
   snapshotScope,
 } from "./mutation-gate.js";
 import { runHtmlStaticGate, HtmlStaticGateResult } from "./html-static-gate.js";
+import { runHtmlBehaviorGate, HtmlBehaviorGateResult } from "./html-behavior-gate.js";
 import { Trail } from "../trail/writer.js";
 
 export interface RunTicketOptions {
@@ -40,6 +41,7 @@ export interface RunTicketResult {
   compileGate?: CompileGateResult;
   mutationGate?: MutationGateResult;
   htmlStaticGate?: HtmlStaticGateResult;
+  htmlBehaviorGate?: HtmlBehaviorGateResult;
 }
 
 export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult> {
@@ -110,6 +112,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   let lastCompileGate: CompileGateResult | undefined;
   let lastMutationGate: MutationGateResult | undefined;
   let lastHtmlStaticGate: HtmlStaticGateResult | undefined;
+  let lastHtmlBehaviorGate: HtmlBehaviorGateResult | undefined;
   let currentBrief = brief;
 
   for (let attempt = 0; attempt <= maxRepairAttempts; attempt++) {
@@ -174,6 +177,26 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           }
           return { dispatch, advanced: false, mutationGate, htmlStaticGate };
         }
+        const htmlBehaviorGate = runHtmlBehaviorGate(opts.cwd, refreshed.scopePath, spec);
+        lastHtmlBehaviorGate = htmlBehaviorGate;
+        Trail.browserCheck(
+          refreshed.id,
+          htmlBehaviorGate.status,
+          "playwright",
+          "deterministic HTML behavior gate",
+          htmlBehaviorGate.durationMs,
+          htmlBehaviorGate.reason ?? null,
+          htmlBehaviorGate.output.slice(0, 500),
+        );
+        if (!htmlBehaviorGate.ok) {
+          const reason = htmlBehaviorGateFailureReport(htmlBehaviorGate);
+          if (attempt < maxRepairAttempts && opts.role === "builder") {
+            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
+            currentBrief = repairBrief(brief, reason, attempt + 1);
+            continue;
+          }
+          return { dispatch, advanced: false, mutationGate, htmlStaticGate, htmlBehaviorGate };
+        }
       }
       let compileGate: CompileGateResult | undefined;
       if (opts.proposedAdvance === "VERIFIED") {
@@ -200,7 +223,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
             currentBrief = repairBrief(brief, reason, attempt + 1);
             continue;
           }
-          return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate };
+          return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
         }
       }
       const result = advanceFeature(refreshed, {
@@ -212,7 +235,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         advanced = true;
         newState = opts.proposedAdvance;
       }
-      return { dispatch, advanced, newState, compileGate, mutationGate, htmlStaticGate };
+      return { dispatch, advanced, newState, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
     }
   }
 
@@ -226,6 +249,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
     compileGate: lastCompileGate,
     mutationGate: lastMutationGate,
     htmlStaticGate: lastHtmlStaticGate,
+    htmlBehaviorGate: lastHtmlBehaviorGate,
   };
 }
 
@@ -272,6 +296,15 @@ function compileGateFailureReport(result: CompileGateResult): string {
     `Reason: ${result.reason ?? "compile/import gate failed"}`,
     result.stdout.trim() ? `stdout:\n${result.stdout.trim().slice(0, 1000)}` : "",
     result.stderr.trim() ? `stderr:\n${result.stderr.trim().slice(0, 1000)}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+function htmlBehaviorGateFailureReport(result: HtmlBehaviorGateResult): string {
+  return [
+    "Gate: html_behavior_gate",
+    `Target: ${result.targetFile ?? "(none)"}`,
+    `Reason: ${result.reason ?? "browser behavior gate failed"}`,
+    result.output.trim() ? `output:\n${result.output.trim().slice(0, 1000)}` : "",
   ].filter(Boolean).join("\n");
 }
 

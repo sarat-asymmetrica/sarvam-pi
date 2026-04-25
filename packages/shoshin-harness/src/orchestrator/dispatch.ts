@@ -3,7 +3,7 @@
 //
 // This is the chokepoint where Shoshin product layer meets the engine layer.
 // All role subagent invocations go through here.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ProjectSpec } from "../spec/types.js";
@@ -214,7 +214,7 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     let stderr = "";
     const timeoutMs = opts.timeoutMs ?? 240_000;
     const timeout = setTimeout(() => {
-      child.kill();
+      killProcessTree(child.pid);
       const elapsed = Date.now() - startedAt;
       Trail.failed(opts.role, `timeout after ${timeoutMs}ms`);
       resolveOuter({
@@ -283,4 +283,24 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
       });
     });
   });
+}
+
+function killProcessTree(pid: number | undefined): void {
+  if (!pid) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Best-effort timeout cleanup.
+    }
+  }
 }

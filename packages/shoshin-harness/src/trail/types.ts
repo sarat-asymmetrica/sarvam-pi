@@ -135,7 +135,7 @@ export interface TrailBrowserCheck extends TrailRecordBase {
   kind: "browser_check";
   feature?: string;
   status: "passed" | "failed" | "skipped";
-  engine: "browser-use";
+  engine: "browser-use" | "playwright";
   task: string;
   durationMs: number;
   reason: string | null;

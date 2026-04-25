@@ -26,7 +26,7 @@ function step(label, fn) {
 }
 
 step("Reset fixture", () => {
-  rmSync(FIXTURE, { recursive: true, force: true });
+  rmFixture(FIXTURE);
   mkdirSync(resolve(FIXTURE, ".shoshin"), { recursive: true });
 });
 
@@ -65,3 +65,15 @@ step("Verify browser_check trail", () => {
 });
 
 console.log("\nBROWSER-USE CAPABILITY SMOKE: PASSED\n");
+
+function rmFixture(path) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      if (attempt === 4) throw err;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    }
+  }
+}
