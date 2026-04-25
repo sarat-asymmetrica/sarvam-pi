@@ -63,20 +63,37 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 
   if (opts.role === "builder") {
     const architectSnapshot = snapshotScope(opts.cwd, opts.feature.scopePath);
-    const architect = await dispatchSubagent({
+    const architectBrief = [
+      "Plan the implementation for the Builder. Do not mutate files.",
+      "You are in a read-only planning pass. Use only read, grep, find, or ls if you need tools.",
+      "Never call write, edit, bash, or capability names during this planning pass.",
+      "",
+      "Builder ticket:",
+      opts.brief,
+    ].join("\n");
+    let architect = await dispatchSubagent({
       role: "architect",
-      ticketBrief: [
-        "Plan the implementation for the Builder. Do not mutate files.",
-        "",
-        "Builder ticket:",
-        opts.brief,
-      ].join("\n"),
+      ticketBrief: architectBrief,
       scopePath: opts.feature.scopePath,
       spec,
       cwd: opts.cwd,
       timeoutMs: opts.timeoutMs,
       sessionKey: `${sessionBase}-architect`,
     });
+    for (let attempt = 0; !architect.ok && attempt < maxRepairAttempts; attempt++) {
+      const toolReason = unavailableToolFailureReport(architect);
+      if (!toolReason) break;
+      Trail.repairAttempt(opts.feature.id, "architect", attempt + 1, maxRepairAttempts, toolReason);
+      architect = await dispatchSubagent({
+        role: "architect",
+        ticketBrief: repairBrief(architectBrief, toolReason, attempt + 1),
+        scopePath: opts.feature.scopePath,
+        spec,
+        cwd: opts.cwd,
+        timeoutMs: opts.timeoutMs,
+        sessionKey: `${sessionBase}-architect`,
+      });
+    }
 
     if (!architect.ok) {
       return { dispatch: architect, advanced: false };
@@ -134,6 +151,12 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       if (scopeReason && attempt < maxRepairAttempts && opts.role === "builder") {
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, scopeReason);
         currentBrief = repairBrief(brief, scopeReason, attempt + 1);
+        continue;
+      }
+      const toolReason = unavailableToolFailureReport(dispatch);
+      if (toolReason && attempt < maxRepairAttempts && opts.role === "builder") {
+        Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, toolReason);
+        currentBrief = repairBrief(brief, toolReason, attempt + 1);
         continue;
       }
       return { dispatch, advanced, newState };
@@ -296,6 +319,22 @@ function scopeViolationFailureReport(dispatch: DispatchResult, opts: RunTicketOp
     "The previous attempt tried to write outside the feature scope.",
     "Repair instruction: implement only the scoped package/artifact. Do not create CLI wiring, app entrypoints, tests, docs, or config outside the allowed scope.",
     "If the original request implies outside-scope wiring, leave that as a note in the final response instead of editing outside scope.",
+  ].join("\n");
+}
+
+function unavailableToolFailureReport(dispatch: DispatchResult): string | null {
+  const text = `${dispatch.error ?? ""}\n${dispatch.output ?? ""}`;
+  const match = text.match(/Sarvam returned unavailable tool call "([^"]+)". Available tools: ([^\n.]+)/i);
+  if (!match) return null;
+  const available = match[2].trim();
+  return [
+    "Gate: tool_name",
+    `Unavailable tool: ${match[1]}`,
+    `Available tools: ${available}`,
+    "The previous attempt called a capability label or invented tool name instead of an executable Pi tool.",
+    `Repair instruction: retry using only these exact tool names: ${available}.`,
+    "If write, edit, or bash are not in the available-tools list, do not call them.",
+    "Do not call bashcap, readcap, grepcap, or other capability names as tools.",
   ].join("\n");
 }
 

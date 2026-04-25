@@ -10,6 +10,7 @@ import {
 	type ToolCall,
 } from "@mariozechner/pi-ai";
 import { isAbsolute, resolve } from "node:path";
+import { normalizeToolName } from "./tool-normalization.ts";
 
 const SARVAM_BASE_URL = process.env.SARVAM_BASE_URL ?? "https://api.sarvam.ai/v1";
 const SARVAM_API_KEY =
@@ -428,17 +429,6 @@ function validateToolCall(toolCall: ToolCall): void {
 			`Blocked mutation path "${path}". Current mutation scope is "${root}". Set SARVAM_PI_MUTATION_ROOT to change the scope or SARVAM_PI_ALLOW_ANY_MUTATION_PATH=1 to disable this guard.`,
 		);
 	}
-}
-
-function normalizeToolName(name: string, tools?: Tool[]): string {
-	// Sarvam occasionally returns CamelCase variants ("Bash", "Read") even when the
-	// tool catalog advertises lowercase names. Normalize against the available
-	// catalog by case-insensitive match; fall back to lowercase if no exact hit.
-	const trimmed = name.trim();
-	if (!tools?.length) return trimmed.toLowerCase();
-	const lowered = trimmed.toLowerCase();
-	const match = tools.find((t) => t.name.toLowerCase() === lowered);
-	return match?.name ?? lowered;
 }
 
 function parseSarvamToolCall(text: string, tools?: Tool[]): ToolCall | undefined {
