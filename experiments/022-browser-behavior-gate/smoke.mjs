@@ -29,11 +29,15 @@ step("Reset fixture", () => {
   rmSync(FIXTURE, { recursive: true, force: true });
   mkdirSync(resolve(FIXTURE, "good"), { recursive: true });
   mkdirSync(resolve(FIXTURE, "bad"), { recursive: true });
+  mkdirSync(resolve(FIXTURE, "planner"), { recursive: true });
+  mkdirSync(resolve(FIXTURE, "counter"), { recursive: true });
 });
 
 step("Create SPA fixtures", () => {
   writeFileSync(resolve(FIXTURE, "good", "index.html"), goodHtml(), "utf8");
   writeFileSync(resolve(FIXTURE, "bad", "index.html"), badHtml(), "utf8");
+  writeFileSync(resolve(FIXTURE, "planner", "index.html"), plannerHtml(), "utf8");
+  writeFileSync(resolve(FIXTURE, "counter", "index.html"), counterHtml(), "utf8");
   return "  fixtures ready";
 });
 
@@ -49,7 +53,11 @@ step("Run behavior gate driver", () => {
       'if (!good.ok || good.status !== "passed") throw new Error(`expected good pass: ${JSON.stringify(good)}`);',
       'const bad = runHtmlBehaviorGate(fixture, "bad", spec);',
       'if (bad.ok || bad.status !== "failed") throw new Error(`expected bad fail: ${JSON.stringify(bad)}`);',
-      'console.log(JSON.stringify({ good: good.output, bad: bad.reason }, null, 2));',
+      'const planner = runHtmlBehaviorGate(fixture, "planner", spec);',
+      'if (!planner.ok || planner.status !== "passed") throw new Error(`expected planner pass: ${JSON.stringify(planner)}`);',
+      'const counter = runHtmlBehaviorGate(fixture, "counter", spec);',
+      'if (!counter.ok || counter.status !== "passed") throw new Error(`expected counter pass: ${JSON.stringify(counter)}`);',
+      'console.log(JSON.stringify({ good: good.output, planner: planner.output, counter: counter.output, bad: bad.reason }, null, 2));',
     ].join("\n"),
     "utf8",
   );
@@ -124,6 +132,72 @@ document.getElementById('expenseForm').addEventListener('submit', event => {
   localStorage.setItem('items', '[]');
   document.getElementById('out').textContent = 'Saved';
 });
+</script>
+</body></html>`;
+}
+
+function plannerHtml() {
+  return `<!doctype html>
+<html><body>
+<h1>Bhajan Practice Planner</h1>
+<form id="sessionForm">
+  <input id="sessionTitle" required>
+  <input id="date" type="date" required>
+  <input id="startTime" type="time" required>
+  <input id="leadSinger" required>
+  <input id="attendees" type="number" required>
+  <button type="submit">Add Session</button>
+</form>
+<div id="totals"></div>
+<ul id="sessions"></ul>
+<script>
+const key = 'sessions';
+const form = document.getElementById('sessionForm');
+const list = document.getElementById('sessions');
+const totals = document.getElementById('totals');
+function load(){ return JSON.parse(localStorage.getItem(key) || '[]'); }
+function save(rows){ localStorage.setItem(key, JSON.stringify(rows)); }
+function render(){
+  const rows = load();
+  list.innerHTML = '';
+  for (const row of rows) {
+    const li = document.createElement('li');
+    li.textContent = row.title + ' ' + row.attendees;
+    list.appendChild(li);
+  }
+  totals.textContent = 'Total sessions ' + rows.length + ' Total attendees ' + rows.reduce((sum, row) => sum + Number(row.attendees), 0);
+}
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const rows = load();
+  rows.push({
+    title: document.getElementById('sessionTitle').value,
+    date: document.getElementById('date').value,
+    startTime: document.getElementById('startTime').value,
+    leadSinger: document.getElementById('leadSinger').value,
+    attendees: Number(document.getElementById('attendees').value)
+  });
+  save(rows);
+  render();
+});
+render();
+</script>
+</body></html>`;
+}
+
+function counterHtml() {
+  return `<!doctype html>
+<html><body>
+<h1>Counter</h1>
+<p>Count: <span id="count">0</span></p>
+<button id="increment">Increment</button>
+<script>
+const key = 'count';
+let count = Number(localStorage.getItem(key) || '0');
+const out = document.getElementById('count');
+function render(){ out.textContent = String(count); localStorage.setItem(key, String(count)); }
+document.getElementById('increment').addEventListener('click', () => { count += 1; render(); });
+render();
 </script>
 </body></html>`;
 }

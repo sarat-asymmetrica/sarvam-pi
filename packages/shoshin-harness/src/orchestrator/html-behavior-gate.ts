@@ -116,6 +116,88 @@ def first(page, selectors):
             return loc.first
     raise AssertionError("Missing selector: " + " | ".join(selectors))
 
+def fill_first(page, selectors, value):
+    field = first(page, selectors)
+    field.fill(value)
+    return field
+
+def click_first(page, selectors):
+    button = first(page, selectors)
+    button.click()
+    page.wait_for_timeout(500)
+    return button
+
+def assert_persisted(page, expected):
+    page.reload()
+    page.wait_for_timeout(500)
+    restored = page.locator("body").inner_text()
+    if expected not in restored:
+        raise AssertionError(f"{expected!r} did not persist after reload")
+    return restored
+
+def run_expense_probe(page):
+    fill_first(page, [
+        "#itemName", "[name='itemName']", "[name='item']", "input[placeholder*='Tomato' i]",
+        "input[placeholder*='item' i]", "input[type='text']"
+    ], "Tomatoes")
+    fill_first(page, [
+        "#quantity", "[name='quantity']", "[name='qty']", "input[placeholder*='quantity' i]",
+        "input[type='number']"
+    ], "2")
+    fill_first(page, [
+        "#unitPrice", "[name='unitPrice']", "[name='price']", "input[placeholder*='price' i]",
+        "input[type='number'] >> nth=1"
+    ], "40")
+    notes = page.locator("#note, [name='note'], textarea")
+    if notes.count() > 0:
+        notes.first.fill("morning stock")
+    click_first(page, ["button[type='submit']", "input[type='submit']", "button"])
+    after = page.locator("body").inner_text()
+    if "Tomatoes" not in after:
+        raise AssertionError("submitted item is not visible")
+    if not re.search(r"80(\.00)?", after):
+        raise AssertionError("expected line/grand total 80 after quantity=2 price=40")
+    assert_persisted(page, "Tomatoes")
+    print("PASS: expense item added, total updated, persistence restored")
+
+def run_planner_probe(page):
+    fill_first(page, [
+        "#sessionTitle", "#title", "[name='sessionTitle']", "[name='title']",
+        "input[placeholder*='session' i]", "input[placeholder*='title' i]", "input[type='text']"
+    ], "Saturday Bhajan Practice")
+    date_fields = page.locator("input[type='date'], [name='date'], #date, #sessionDate")
+    if date_fields.count() > 0:
+        date_fields.first.fill("2026-04-25")
+    time_fields = page.locator("input[type='time'], [name='startTime'], #startTime, #time")
+    if time_fields.count() > 0:
+        time_fields.first.fill("18:30")
+    lead_fields = page.locator("#leadSinger, [name='leadSinger'], [name='lead'], input[placeholder*='lead' i], input[placeholder*='singer' i]")
+    if lead_fields.count() > 0:
+        lead_fields.first.fill("Meera")
+    attendee_fields = page.locator("#attendees, [name='attendees'], [name='attendeeCount'], input[placeholder*='attendee' i], input[type='number']")
+    if attendee_fields.count() > 0:
+        attendee_fields.first.fill("12")
+    click_first(page, ["button[type='submit']", "input[type='submit']", "button"])
+    after = page.locator("body").inner_text()
+    if "Saturday Bhajan Practice" not in after:
+        raise AssertionError("submitted session is not visible")
+    if "12" not in after:
+        raise AssertionError("attendee count is not visible")
+    assert_persisted(page, "Saturday Bhajan Practice")
+    print("PASS: planner session added, totals visible, persistence restored")
+
+def run_counter_probe(page):
+    before = page.locator("body").inner_text()
+    click_first(page, [
+        "button:has-text('+')", "button:has-text('Increment')", "button:has-text('Add')",
+        "button:has-text('Increase')", "button"
+    ])
+    after = page.locator("body").inner_text()
+    if before == after and not re.search(r"\b1\b", after):
+        raise AssertionError("counter text did not change after click")
+    assert_persisted(page, "1")
+    print("PASS: counter increments and persistence restored")
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page(viewport={"width": 390, "height": 844})
@@ -123,48 +205,18 @@ with sync_playwright() as p:
     page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
     page.goto(target)
     body = page.locator("body").inner_text(timeout=5000)
-    if not re.search(r"item|expense|kirana|unit price|price", body, re.I):
-        print("SKIP: page is not an item/expense style app")
+    if re.search(r"item|expense|kirana|unit price|price", body, re.I):
+        run_expense_probe(page)
+    elif re.search(r"session|planner|practice|attendee|lead singer|bhajan", body, re.I):
+        run_planner_probe(page)
+    elif re.search(r"counter|count|increment", body, re.I):
+        run_counter_probe(page)
+    else:
+        print("SKIP: no deterministic behavior probe for this app intent")
         browser.close()
         sys.exit(0)
-
-    item = first(page, [
-        "#itemName", "[name='itemName']", "[name='item']", "input[placeholder*='Tomato' i]",
-        "input[placeholder*='item' i]", "input[type='text']"
-    ])
-    quantity = first(page, [
-        "#quantity", "[name='quantity']", "[name='qty']", "input[placeholder*='quantity' i]",
-        "input[type='number']"
-    ])
-    price = first(page, [
-        "#unitPrice", "[name='unitPrice']", "[name='price']", "input[placeholder*='price' i]",
-        "input[type='number'] >> nth=1"
-    ])
-
-    item.fill("Tomatoes")
-    quantity.fill("2")
-    price.fill("40")
-    notes = page.locator("#note, [name='note'], textarea")
-    if notes.count() > 0:
-        notes.first.fill("morning stock")
-
-    button = page.locator("button[type='submit'], input[type='submit'], button").first
-    button.click()
-    page.wait_for_timeout(500)
-    after = page.locator("body").inner_text()
-    if "Tomatoes" not in after:
-        raise AssertionError("submitted item is not visible")
-    if not re.search(r"80(\.00)?", after):
-        raise AssertionError("expected line/grand total 80 after quantity=2 price=40")
-
-    page.reload()
-    page.wait_for_timeout(500)
-    restored = page.locator("body").inner_text()
-    if "Tomatoes" not in restored:
-        raise AssertionError("item did not persist after reload")
     if errors:
         raise AssertionError("browser console errors: " + " | ".join(errors[:3]))
-    print("PASS: item added, total updated, persistence restored")
     browser.close()
 `;
 }
