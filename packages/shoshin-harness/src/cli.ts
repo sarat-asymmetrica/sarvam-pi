@@ -12,6 +12,7 @@ import { runRoles } from "./roles/cli.js";
 import { runDispatch } from "./orchestrator/cli.js";
 import { runScaffoldMath } from "./templates/cli.js";
 import { runChat } from "./chat/cli.js";
+import { runBrowserCheck } from "./browser/cli.js";
 
 const program = new Command();
 
@@ -122,6 +123,16 @@ program
   .action(async (questionParts: string[] | undefined, opts) => {
     const question = (questionParts ?? []).join(" ").trim() || undefined;
     await runChat({ question, timeoutSec: opts.timeoutSec });
+  });
+
+program
+  .command("browser-check [task...]")
+  .description("Run an optional browser-use browser task and log a browser_check trail event.")
+  .option("--feature <name>", "feature id to attach to the trail event")
+  .option("--timeout-sec <n>", "browser-use timeout in seconds (default 180)", "180")
+  .option("--require-installed", "fail instead of skip when browser-use is not installed")
+  .action(async (taskParts: string[] | undefined, opts) => {
+    await runBrowserCheck(taskParts, opts);
   });
 
 program

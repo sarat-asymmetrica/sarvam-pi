@@ -22,6 +22,7 @@ const TOOL_FOR_CAP: Partial<Record<Capability["kind"], string[]>> = {
   EditCap: ["edit"],
   BashCap: ["bash"],
   TestCap: ["bash"], // for now: TestCap is bash-with-test-allowlist
+  BrowserCap: [], // Shoshin-level browser runner, not a Pi tool yet
   WebSearchCap: [], // sarvam-pi engine layer does not yet ship a web-search tool
   AdvisoryCap: [], // pure-text capability — no engine-layer tool
   SpecCap: [], // shoshin-level capability, not a Pi tool
@@ -70,6 +71,9 @@ export function envelopeSummary(env: CapabilityEnvelope): string {
     } else if (cap.kind === "WebSearchCap") {
       const dom = cap.allowedDomains?.length ? cap.allowedDomains.join(",") : "any";
       lines.push(`  - WebSearchCap<domains: ${dom}>`);
+    } else if (cap.kind === "BrowserCap") {
+      const origins = cap.allowedOrigins?.length ? cap.allowedOrigins.join(",") : "local/offline";
+      lines.push(`  - BrowserCap<origins: ${origins}>`);
     } else {
       lines.push(`  - ${cap.kind}`);
     }

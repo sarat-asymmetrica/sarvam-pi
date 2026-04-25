@@ -143,6 +143,26 @@ export const Trail = {
       reason,
     });
   },
+  browserCheck(
+    feature: string | undefined,
+    status: "passed" | "failed" | "skipped",
+    engine: "browser-use",
+    task: string,
+    durationMs: number,
+    reason: string | null,
+    outputDigest: string,
+  ): void {
+    logTrail({
+      kind: "browser_check",
+      feature,
+      status,
+      engine,
+      task,
+      durationMs,
+      reason,
+      outputDigest,
+    });
+  },
   pulse(
     sessionTurns: number,
     elapsedMs: number,

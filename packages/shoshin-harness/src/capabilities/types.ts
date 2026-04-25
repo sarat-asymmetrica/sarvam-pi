@@ -13,6 +13,7 @@ export type CapabilityKind =
   | "EditCap"
   | "BashCap"
   | "WebSearchCap"
+  | "BrowserCap"
   | "TestCap"
   | "AdvisoryCap"
   | "SpecCap"
@@ -46,17 +47,23 @@ export interface WebSearchScopedCap extends CapabilityBase {
   allowedDomains?: string[]; // empty/undefined = any public
 }
 
+export interface BrowserScopedCap extends CapabilityBase {
+  kind: "BrowserCap";
+  allowedOrigins?: string[]; // empty/undefined = local/offline only by policy prompt
+}
+
 export type Capability =
   | (CapabilityBase & {
       kind: Exclude<
         CapabilityKind,
-        "WriteCap" | "EditCap" | "BashCap" | "WebSearchCap"
+        "WriteCap" | "EditCap" | "BashCap" | "WebSearchCap" | "BrowserCap"
       >;
     })
   | ScopedWriteCap
   | ScopedEditCap
   | ScopedBashCap
-  | WebSearchScopedCap;
+  | WebSearchScopedCap
+  | BrowserScopedCap;
 
 export interface CapabilityEnvelope {
   role: string;

@@ -11,6 +11,7 @@ interface EnvelopeContext {
   scopePath?: string;
   cwd: string;
   webDomains?: string[];
+  browserOrigins?: string[];
 }
 
 const allowedBuilderCommands = ["test", "build", "lint", "go", "npm", "tsc", "vitest", "pytest"];
@@ -84,6 +85,7 @@ export function envelopeForRole(role: RoleName, ctx: EnvelopeContext): Capabilit
         timeoutMs: 300_000, // QA runs may be longer
       });
       caps.push({ kind: "TestCap" });
+      caps.push({ kind: "BrowserCap", allowedOrigins: ctx.browserOrigins });
       break;
 
     case "librarian":

@@ -18,6 +18,7 @@ export type TrailKind =
   | "mutation_gate"
   | "html_static_gate"
   | "repair_attempt"
+  | "browser_check"
   | "tool_call"
   | "user_prompt"
   | "memory_write"
@@ -130,6 +131,17 @@ export interface TrailRepairAttempt extends TrailRecordBase {
   reason: string;
 }
 
+export interface TrailBrowserCheck extends TrailRecordBase {
+  kind: "browser_check";
+  feature?: string;
+  status: "passed" | "failed" | "skipped";
+  engine: "browser-use";
+  task: string;
+  durationMs: number;
+  reason: string | null;
+  outputDigest: string;
+}
+
 export interface TrailToolCall extends TrailRecordBase {
   kind: "tool_call";
   tool: string;
@@ -196,6 +208,7 @@ export type TrailRecord =
   | TrailMutationGate
   | TrailHtmlStaticGate
   | TrailRepairAttempt
+  | TrailBrowserCheck
   | TrailToolCall
   | TrailUserPrompt
   | TrailMemoryWrite
