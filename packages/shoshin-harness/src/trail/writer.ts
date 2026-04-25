@@ -70,6 +70,28 @@ export const Trail = {
       cost,
     });
   },
+  compileGate(
+    feature: string,
+    language: string,
+    status: "passed" | "failed" | "skipped",
+    command: string | null,
+    cwd: string,
+    durationMs: number,
+    reason: string | null,
+    outputDigest: string,
+  ): void {
+    logTrail({
+      kind: "compile_gate",
+      feature,
+      language,
+      status,
+      command,
+      cwd,
+      durationMs,
+      reason,
+      outputDigest,
+    });
+  },
   pulse(
     sessionTurns: number,
     elapsedMs: number,

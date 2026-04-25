@@ -14,6 +14,8 @@ import { advanceFeature } from "../features/transitions.js";
 import { Feature, FeatureState } from "../features/types.js";
 import { RoleName } from "../roles/types.js";
 import { bumpTurn, logPulseIfDue } from "../time/pulse.js";
+import { runCompileOrImportGate, CompileGateResult } from "./compile-gate.js";
+import { Trail } from "../trail/writer.js";
 
 export interface RunTicketOptions {
   role: RoleName;
@@ -28,6 +30,7 @@ export interface RunTicketResult {
   dispatch: DispatchResult;
   advanced: boolean;
   newState?: FeatureState;
+  compileGate?: CompileGateResult;
 }
 
 export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult> {
@@ -91,6 +94,27 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   if (dispatch.ok && opts.proposedAdvance) {
     const refreshed = getFeature(opts.feature.id, opts.cwd);
     if (refreshed) {
+      let compileGate: CompileGateResult | undefined;
+      if (opts.proposedAdvance === "VERIFIED") {
+        compileGate = runCompileOrImportGate({
+          cwd: opts.cwd,
+          scopePath: refreshed.scopePath,
+          spec,
+        });
+        Trail.compileGate(
+          refreshed.id,
+          compileGate.language,
+          compileGate.status,
+          compileGate.command,
+          compileGate.cwd,
+          compileGate.durationMs,
+          compileGate.reason ?? null,
+          `${compileGate.stdout}\n${compileGate.stderr}`.trim().slice(0, 500),
+        );
+        if (!compileGate.ok) {
+          return { dispatch, advanced: false, compileGate };
+        }
+      }
       const result = advanceFeature(refreshed, {
         to: opts.proposedAdvance,
         evidence: dispatch.output.slice(0, 200),
@@ -100,6 +124,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         advanced = true;
         newState = opts.proposedAdvance;
       }
+      return { dispatch, advanced, newState, compileGate };
     }
   }
 
