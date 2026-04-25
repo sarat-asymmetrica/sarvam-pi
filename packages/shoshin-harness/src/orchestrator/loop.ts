@@ -415,13 +415,48 @@ function compileGateFailureReport(result: CompileGateResult): string {
   ].filter(Boolean).join("\n");
 }
 
-function htmlBehaviorGateFailureReport(result: HtmlBehaviorGateResult): string {
+export function htmlBehaviorGateFailureReport(result: HtmlBehaviorGateResult): string {
+  const diagnostics = htmlBehaviorGateDiagnostics(result);
   return [
     "Gate: html_behavior_gate",
     `Target: ${result.targetFile ?? "(none)"}`,
     `Reason: ${result.reason ?? "browser behavior gate failed"}`,
     result.output.trim() ? `output:\n${result.output.trim().slice(0, 1000)}` : "",
+    diagnostics.length ? ["Repair diagnostics:", ...diagnostics.map((item) => `- ${item}`)].join("\n") : "",
   ].filter(Boolean).join("\n");
+}
+
+function htmlBehaviorGateDiagnostics(result: HtmlBehaviorGateResult): string[] {
+  const text = `${result.reason ?? ""}\n${result.output ?? ""}`;
+  const hints: string[] = [];
+  if (/submitted (?:session|item) is not visible/i.test(text)) {
+    hints.push("The form submit path did not render the newly submitted record. Check that the submit listener is attached to the actual form and calls event.preventDefault().");
+    hints.push("If you pass an object method as an event callback, bind it or wrap it: addEventListener('DOMContentLoaded', () => ui.init()). Unbound methods often make this point at document/window instead of the app object.");
+    hints.push("After saving state, call the render function and ensure it writes into the visible list/container the probe can read.");
+  }
+  if (/did not persist after reload/i.test(text)) {
+    hints.push("The saved record disappeared after reload. Check that localStorage.setItem runs after add/delete/clear and that startup loads from the same key before rendering.");
+  }
+  if (/attendee count is not visible/i.test(text)) {
+    hints.push("The planner probe submitted 12 attendees but did not see 12 in the page. Render the attendee count in either the row or totals area.");
+  }
+  if (/expected line\/grand total 80/i.test(text)) {
+    hints.push("The expense probe submitted quantity=2 and price=40. Recalculate and render a visible 80 or 80.00 line/grand total after submit.");
+  }
+  if (/counter text did not change/i.test(text)) {
+    hints.push("The counter button did not change visible text. Check the click listener, state increment, render call, and localStorage update.");
+  }
+  if (/Missing selector:/i.test(text)) {
+    hints.push("The probe could not find expected controls. Prefer stable ids/names: expense uses itemName, quantity, unitPrice; planner uses title/sessionTitle, date, startTime, leadSinger, attendees.");
+  }
+  if (/browser console errors:/i.test(text)) {
+    hints.push("Fix the first browser console error before changing behavior. It often prevents event listeners from attaching or render functions from running.");
+  }
+  if (!hints.length) {
+    hints.push("Reproduce the behavior manually from the browser-gate output: fill the form, click submit, verify visible output, reload, and verify persistence.");
+    hints.push("Make the smallest targeted edit to the event listener, state update, render function, or localStorage key that explains the failed assertion.");
+  }
+  return hints;
 }
 
 // Convenience: dispatch a Scout against a free-form question without a feature.
