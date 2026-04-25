@@ -1,0 +1,21 @@
+{
+  "name": "rhythm-smoke",
+  "oneLineGoal": "Tiny Go pkg that returns one of three regimes from a digital root.",
+  "primaryUser": "shoshin developer",
+  "targetLanguages": [
+    "en"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "cli",
+  "primaryStack": {
+    "lang": "go"
+  },
+  "surfaces": [
+    "cli"
+  ],
+  "mathPrimitives": [],
+  "doneInvariants": [
+    "correct",
+    "tested"
+  ]
+}

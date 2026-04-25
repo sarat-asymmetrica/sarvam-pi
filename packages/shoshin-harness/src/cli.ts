@@ -97,6 +97,7 @@ program
   .command("run")
   .description("Autonomous run. Orchestrator dispatches role subagents until tickets exhausted.")
   .option("--max-turns <n>", "max orchestrator turns (default 20)", "20")
+  .option("--timeout-sec <n>", "per-ticket subagent timeout (default 300)", "300")
   .option("--dry-run", "log dispatch decisions without spawning subagents")
   .action(async (opts) => {
     await runRun(opts);
@@ -105,8 +106,9 @@ program
 program
   .command("evening")
   .description("Reconvene flow: summarize day, propose memory updates, run Librarian compaction.")
-  .action(async () => {
-    await runEvening();
+  .option("--no-prompt", "skip interactive MEMORY.md append confirmation")
+  .action(async (opts) => {
+    await runEvening({ noPrompt: !opts.prompt });
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
