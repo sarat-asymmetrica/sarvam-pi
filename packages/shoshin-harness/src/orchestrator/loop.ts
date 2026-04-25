@@ -346,13 +346,13 @@ function unavailableToolFailureReport(dispatch: DispatchResult): string | null {
 
 function longLivedCommandFailureReport(dispatch: DispatchResult): string | null {
   const text = `${dispatch.error ?? ""}\n${dispatch.output ?? ""}`;
-  const match = text.match(/Blocked long-lived bash command "([^"]+)"/i);
+  const match = text.match(/Blocked (?:long-lived )?bash command "([^"]+)"/i);
   if (!match) return null;
   return [
     "Gate: process_hygiene",
     `Blocked command: ${match[1]}`,
-    "The previous attempt tried to start a long-lived server or background process.",
-    "Repair instruction: verify with one-shot checks that terminate, such as reading the file, running a compiler, or using a deterministic test command.",
+    "The previous attempt used a bash command outside the role's runtime allowlist or tried to start a long-lived process.",
+    "Repair instruction: use only the allowed command roots shown in the BashCap envelope, and prefer one-shot checks that terminate.",
     "For static HTML, do not start an HTTP server. The harness will run deterministic browser checks after the Builder returns.",
   ].join("\n");
 }

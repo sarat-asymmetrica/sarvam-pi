@@ -15,7 +15,7 @@ interface EnvelopeContext {
 }
 
 const allowedBuilderCommands = ["test", "build", "lint", "go", "npm", "tsc", "vitest", "pytest"];
-const allowedReviewerCommands = ["diff", "log", "test", "git"];
+const allowedReviewerCommands = ["git diff", "git log", "git show", "test"];
 const allowedQaCommands = ["test", "run", "go", "npm", "vitest", "pytest"];
 const allowedLibrarianCommands = ["git log", "git diff", "git show"];
 

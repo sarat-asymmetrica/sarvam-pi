@@ -2,7 +2,8 @@
 // sarvam-subagent-extension expects:
 //   --tools <comma-separated tool names>
 //   SARVAM_PI_MUTATION_ROOT=<scope path>     (for WriteCap/EditCap scopes)
-//   SARVAM_PI_BASH_TIMEOUT_MS=<ms>           (informational; current ext doesn't read it)
+//   SARVAM_PI_BASH_TIMEOUT_MS=<ms>
+//   SARVAM_PI_BASH_ALLOWED_COMMANDS=<csv command roots>
 //
 // This is the CHOKEPOINT where capability-shaped intent becomes Pi-shaped reality.
 // All scope enforcement at the engine layer goes through this translation.
@@ -47,8 +48,9 @@ export function toPiPlan(env: CapabilityEnvelope): PiToolPlan {
       if (cap.timeoutMs) {
         envOverrides.SARVAM_PI_BASH_TIMEOUT_MS = String(cap.timeoutMs);
       }
-      // Allowed commands aren't yet enforced by engine layer; we surface them in
-      // the system prompt instead so the model self-restricts (Contract I principle).
+      if (cap.allowedCommands?.length) {
+        envOverrides.SARVAM_PI_BASH_ALLOWED_COMMANDS = cap.allowedCommands.join(",");
+      }
     }
   }
 

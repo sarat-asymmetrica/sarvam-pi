@@ -10,6 +10,7 @@ import {
 	type ToolCall,
 } from "@mariozechner/pi-ai";
 import { isAbsolute, resolve } from "node:path";
+import { validateBashCommand } from "./bash-policy.ts";
 import { normalizeToolName } from "./tool-normalization.ts";
 
 const SARVAM_BASE_URL = process.env.SARVAM_BASE_URL ?? "https://api.sarvam.ai/v1";
@@ -25,15 +26,6 @@ const MUTATION_TOOL_RESULT_LIMIT = 4;
 const STATE_TOOL_RESULT_LIMIT = 8;
 const DEFAULT_MUTATION_ROOT = "experiments/002-tool-loop-smoke/fixture/";
 const MUTATING_TOOLS = new Set(["edit", "write"]);
-const LONG_LIVED_BASH_PATTERNS = [
-	/\bpython(?:3)?\s+-m\s+http\.server\b/i,
-	/\bnpm\s+run\s+dev\b/i,
-	/\bnpm\s+start\b/i,
-	/\bnpx\s+vite\b/i,
-	/\bvite\s+(?:--host\b|--port\b|$)/i,
-	/\bnext\s+dev\b/i,
-	/\bserve\s+(?:-s\s+)?\S+/i,
-];
 
 function textFromContent(content: any): string {
 	if (typeof content === "string") {
@@ -446,14 +438,8 @@ function validateToolCall(toolCall: ToolCall): void {
 
 function validateBashToolCall(toolCall: ToolCall): void {
 	const command = typeof toolCall.arguments?.command === "string" ? toolCall.arguments.command : "";
-	if (!command) {
-		throw new Error('Bash tool requires a "command" argument.');
-	}
-	if (LONG_LIVED_BASH_PATTERNS.some((pattern) => pattern.test(command))) {
-		throw new Error(
-			`Blocked long-lived bash command "${command}". Use one-shot checks that terminate; do not start dev servers or background HTTP servers in Builder dispatches.`,
-		);
-	}
+	const result = validateBashCommand(command);
+	if (!result.ok) throw new Error(result.reason);
 }
 
 function parseSarvamToolCall(text: string, tools?: Tool[]): ToolCall | undefined {
