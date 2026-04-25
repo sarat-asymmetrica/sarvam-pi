@@ -127,6 +127,22 @@ export const Trail = {
       reason,
     });
   },
+  repairAttempt(
+    feature: string,
+    role: string,
+    attempt: number,
+    maxAttempts: number,
+    reason: string,
+  ): void {
+    logTrail({
+      kind: "repair_attempt",
+      feature,
+      role,
+      attempt,
+      maxAttempts,
+      reason,
+    });
+  },
   pulse(
     sessionTurns: number,
     elapsedMs: number,

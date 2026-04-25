@@ -17,6 +17,7 @@ export type TrailKind =
   | "compile_gate"
   | "mutation_gate"
   | "html_static_gate"
+  | "repair_attempt"
   | "tool_call"
   | "user_prompt"
   | "memory_write"
@@ -120,6 +121,15 @@ export interface TrailHtmlStaticGate extends TrailRecordBase {
   reason: string | null;
 }
 
+export interface TrailRepairAttempt extends TrailRecordBase {
+  kind: "repair_attempt";
+  feature: string;
+  role: string;
+  attempt: number;
+  maxAttempts: number;
+  reason: string;
+}
+
 export interface TrailToolCall extends TrailRecordBase {
   kind: "tool_call";
   tool: string;
@@ -185,6 +195,7 @@ export type TrailRecord =
   | TrailCompileGate
   | TrailMutationGate
   | TrailHtmlStaticGate
+  | TrailRepairAttempt
   | TrailToolCall
   | TrailUserPrompt
   | TrailMemoryWrite

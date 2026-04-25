@@ -1,7 +1,8 @@
 // Mutation gate for Builder completion claims.
 // Foundation-phase choice: compare scoped file fingerprints before/after dispatch
 // so a prose-only or read-only "success" cannot advance a feature to MODEL_DONE.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, relative, resolve } from "node:path";
 
 export interface MutationSnapshot {
@@ -52,7 +53,7 @@ function listFingerprints(root: string): Record<string, string> {
     const st = statSync(path);
     if (st.isFile()) {
       const key = relative(root, path).replace(/\\/g, "/");
-      out[key] = `${st.size}:${Math.floor(st.mtimeMs)}`;
+      out[key] = fileFingerprint(path);
       return;
     }
     if (!st.isDirectory()) return;
@@ -63,4 +64,8 @@ function listFingerprints(root: string): Record<string, string> {
   };
   visit(root);
   return out;
+}
+
+function fileFingerprint(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }

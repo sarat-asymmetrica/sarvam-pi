@@ -30,6 +30,7 @@ export interface RunTicketOptions {
   cwd: string;
   proposedAdvance?: FeatureState; // if dispatch succeeds, advance the feature here
   timeoutMs?: number;
+  maxRepairAttempts?: number;
 }
 
 export interface RunTicketResult {
@@ -56,6 +57,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   const sessionBase = `feature-${opts.feature.id}`;
   let brief = opts.brief;
   let mutationSnapshot: ReturnType<typeof snapshotScope> | null = null;
+  const maxRepairAttempts = Math.max(0, opts.maxRepairAttempts ?? 2);
 
   if (opts.role === "builder") {
     const architectSnapshot = snapshotScope(opts.cwd, opts.feature.scopePath);
@@ -99,30 +101,41 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       "Use the plan as guidance, but verify against the actual files before editing.",
     ].join("\n");
 
-    if (opts.proposedAdvance === "MODEL_DONE") {
-      mutationSnapshot = snapshotScope(opts.cwd, opts.feature.scopePath);
-    }
+    mutationSnapshot = shouldMutationGate(opts) ? snapshotScope(opts.cwd, opts.feature.scopePath) : null;
   }
-
-  const dispatch = await dispatchSubagent({
-    role: opts.role,
-    ticketBrief: brief,
-    scopePath: opts.feature.scopePath,
-    spec,
-    cwd: opts.cwd,
-    timeoutMs: opts.timeoutMs,
-    sessionKey: `${sessionBase}-${opts.role}`,
-  });
 
   let advanced = false;
   let newState: FeatureState | undefined;
+  let dispatch: DispatchResult | null = null;
+  let lastCompileGate: CompileGateResult | undefined;
+  let lastMutationGate: MutationGateResult | undefined;
+  let lastHtmlStaticGate: HtmlStaticGateResult | undefined;
+  let currentBrief = brief;
 
-  if (dispatch.ok && opts.proposedAdvance) {
+  for (let attempt = 0; attempt <= maxRepairAttempts; attempt++) {
+    if (attempt > 0) {
+      mutationSnapshot = shouldMutationGate(opts) ? snapshotScope(opts.cwd, opts.feature.scopePath) : null;
+    }
+    dispatch = await dispatchSubagent({
+      role: opts.role,
+      ticketBrief: currentBrief,
+      scopePath: opts.feature.scopePath,
+      spec,
+      cwd: opts.cwd,
+      timeoutMs: opts.timeoutMs,
+      sessionKey: `${sessionBase}-${opts.role}`,
+    });
+
+    if (!dispatch.ok || !opts.proposedAdvance) {
+      return { dispatch, advanced, newState };
+    }
+
     const refreshed = getFeature(opts.feature.id, opts.cwd);
     if (refreshed) {
       let mutationGate: MutationGateResult | undefined;
       if (mutationSnapshot) {
         mutationGate = compareMutationSnapshot(mutationSnapshot);
+        lastMutationGate = mutationGate;
         Trail.mutationGate(
           refreshed.id,
           mutationGate.ok ? "passed" : "failed",
@@ -131,12 +144,19 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           mutationGate.reason ?? null,
         );
         if (!mutationGate.ok) {
+          const reason = mutationGateFailureReport(mutationGate);
+          if (attempt < maxRepairAttempts && opts.role === "builder") {
+            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
+            currentBrief = repairBrief(brief, reason, attempt + 1);
+            continue;
+          }
           return { dispatch, advanced: false, mutationGate };
         }
       }
       let htmlStaticGate: HtmlStaticGateResult | undefined;
       if (opts.proposedAdvance === "MODEL_DONE") {
         htmlStaticGate = runHtmlStaticGate(opts.cwd, refreshed.scopePath, spec);
+        lastHtmlStaticGate = htmlStaticGate;
         Trail.htmlStaticGate(
           refreshed.id,
           htmlStaticGate.status,
@@ -146,6 +166,12 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           htmlStaticGate.reason ?? null,
         );
         if (!htmlStaticGate.ok) {
+          const reason = htmlStaticGateFailureReport(htmlStaticGate);
+          if (attempt < maxRepairAttempts && opts.role === "builder") {
+            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
+            currentBrief = repairBrief(brief, reason, attempt + 1);
+            continue;
+          }
           return { dispatch, advanced: false, mutationGate, htmlStaticGate };
         }
       }
@@ -156,6 +182,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           scopePath: refreshed.scopePath,
           spec,
         });
+        lastCompileGate = compileGate;
         Trail.compileGate(
           refreshed.id,
           compileGate.language,
@@ -167,6 +194,12 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           `${compileGate.stdout}\n${compileGate.stderr}`.trim().slice(0, 500),
         );
         if (!compileGate.ok) {
+          const reason = compileGateFailureReport(compileGate);
+          if (attempt < maxRepairAttempts && opts.role === "builder") {
+            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
+            currentBrief = repairBrief(brief, reason, attempt + 1);
+            continue;
+          }
           return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate };
         }
       }
@@ -183,7 +216,63 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
     }
   }
 
-  return { dispatch, advanced, newState };
+  if (!dispatch) {
+    throw new Error("runTicket exhausted without dispatching");
+  }
+  return {
+    dispatch,
+    advanced,
+    newState,
+    compileGate: lastCompileGate,
+    mutationGate: lastMutationGate,
+    htmlStaticGate: lastHtmlStaticGate,
+  };
+}
+
+function shouldMutationGate(opts: RunTicketOptions): boolean {
+  return opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE";
+}
+
+function repairBrief(originalBrief: string, reason: string, attempt: number): string {
+  return [
+    originalBrief,
+    "",
+    `=== Repair attempt ${attempt} ===`,
+    "Your previous attempt was blocked by the harness quality gates.",
+    "Fix only the issues below. Do not restart from scratch if a scoped artifact already exists.",
+    "Read the relevant file first, make the smallest targeted edit, then verify again.",
+    "",
+    reason,
+  ].join("\n");
+}
+
+function mutationGateFailureReport(result: MutationGateResult): string {
+  return [
+    "Gate: mutation_gate",
+    `Root: ${result.root}`,
+    `Reason: ${result.reason ?? "no scoped mutation detected"}`,
+    result.changedFiles.length ? `Changed files: ${result.changedFiles.join(", ")}` : "Changed files: none",
+  ].join("\n");
+}
+
+function htmlStaticGateFailureReport(result: HtmlStaticGateResult): string {
+  return [
+    "Gate: html_static_gate",
+    `Root: ${result.root}`,
+    `Files checked: ${result.filesChecked}`,
+    ...result.issues.slice(0, 8).map((issue) => `- ${issue.file}: ${issue.code}: ${issue.message}`),
+  ].join("\n");
+}
+
+function compileGateFailureReport(result: CompileGateResult): string {
+  return [
+    "Gate: compile_gate",
+    `Command: ${result.command ?? "(none)"}`,
+    `CWD: ${result.cwd}`,
+    `Reason: ${result.reason ?? "compile/import gate failed"}`,
+    result.stdout.trim() ? `stdout:\n${result.stdout.trim().slice(0, 1000)}` : "",
+    result.stderr.trim() ? `stderr:\n${result.stderr.trim().slice(0, 1000)}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 // Convenience: dispatch a Scout against a free-form question without a feature.
