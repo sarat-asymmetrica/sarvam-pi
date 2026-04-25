@@ -1,0 +1,23 @@
+{
+  "name": "math-scaffold-smoke",
+  "oneLineGoal": "Verify math primitive scaffolding selects + writes correctly.",
+  "primaryUser": "shoshin developer",
+  "targetLanguages": [
+    "en"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "api",
+  "primaryStack": {
+    "lang": "go"
+  },
+  "surfaces": [
+    "telegram",
+    "miniapp"
+  ],
+  "mathPrimitives": [],
+  "doneInvariants": [
+    "correct",
+    "tested",
+    "observable"
+  ]
+}

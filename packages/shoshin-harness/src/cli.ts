@@ -10,6 +10,7 @@ import { runMorning, runEvening, runRun } from "./rhythm/cli.js";
 import { runTrail } from "./trail/cli.js";
 import { runRoles } from "./roles/cli.js";
 import { runDispatch } from "./orchestrator/cli.js";
+import { runScaffoldMath } from "./templates/cli.js";
 
 const program = new Command();
 
@@ -65,6 +66,14 @@ program
   .argument("[name]", "role name (for show / prompt)")
   .action(async (action: string | undefined, name: string | undefined) => {
     await runRoles(action ?? "list", name);
+  });
+
+program
+  .command("scaffold-math")
+  .description("Copy math primitives selected from ProjectSpec into <app>/internal/math/.")
+  .option("--dry-run", "show selection without writing files")
+  .action(async (opts) => {
+    await runScaffoldMath(opts);
   });
 
 program
