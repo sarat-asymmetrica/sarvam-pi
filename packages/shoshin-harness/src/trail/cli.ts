@@ -59,6 +59,8 @@ function kindColor(kind: TrailKind): (s: string) => string {
       return kleur.gray;
     case "compile_gate":
       return kleur.blue;
+    case "mutation_gate":
+      return kleur.blue;
     case "feature_advance":
       return kleur.magenta;
     case "spec_written":
@@ -97,6 +99,8 @@ function oneLineDigest(r: TrailRecord): string {
       return `${r.role}: ${r.tokens.total} tokens in ${r.durationMs}ms`;
     case "compile_gate":
       return `${r.feature}: ${r.status} ${r.command ?? r.reason ?? ""}`.trim();
+    case "mutation_gate":
+      return `${r.feature}: ${r.status} ${r.changedFiles.slice(0, 3).join(", ") || r.reason}`;
     case "tool_call":
       return `${r.tool}(${r.argsDigest.slice(0, 80)})`;
     case "user_prompt":

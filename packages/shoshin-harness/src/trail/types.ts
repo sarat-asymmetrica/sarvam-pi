@@ -15,6 +15,7 @@ export type TrailKind =
   | "subagent_failed"
   | "session_summary"
   | "compile_gate"
+  | "mutation_gate"
   | "tool_call"
   | "user_prompt"
   | "memory_write"
@@ -98,6 +99,15 @@ export interface TrailCompileGate extends TrailRecordBase {
   outputDigest: string;
 }
 
+export interface TrailMutationGate extends TrailRecordBase {
+  kind: "mutation_gate";
+  feature: string;
+  status: "passed" | "failed";
+  root: string;
+  changedFiles: string[];
+  reason: string | null;
+}
+
 export interface TrailToolCall extends TrailRecordBase {
   kind: "tool_call";
   tool: string;
@@ -161,6 +171,7 @@ export type TrailRecord =
   | TrailSubagentFailed
   | TrailSessionSummary
   | TrailCompileGate
+  | TrailMutationGate
   | TrailToolCall
   | TrailUserPrompt
   | TrailMemoryWrite

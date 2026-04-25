@@ -15,6 +15,11 @@ import { Feature, FeatureState } from "../features/types.js";
 import { RoleName } from "../roles/types.js";
 import { bumpTurn, logPulseIfDue } from "../time/pulse.js";
 import { runCompileOrImportGate, CompileGateResult } from "./compile-gate.js";
+import {
+  compareMutationSnapshot,
+  MutationGateResult,
+  snapshotScope,
+} from "./mutation-gate.js";
 import { Trail } from "../trail/writer.js";
 
 export interface RunTicketOptions {
@@ -31,6 +36,7 @@ export interface RunTicketResult {
   advanced: boolean;
   newState?: FeatureState;
   compileGate?: CompileGateResult;
+  mutationGate?: MutationGateResult;
 }
 
 export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult> {
@@ -47,6 +53,10 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 
   const sessionBase = `feature-${opts.feature.id}`;
   let brief = opts.brief;
+  const mutationSnapshot =
+    opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE"
+      ? snapshotScope(opts.cwd, opts.feature.scopePath)
+      : null;
 
   if (opts.role === "builder") {
     const architect = await dispatchSubagent({
@@ -94,6 +104,20 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   if (dispatch.ok && opts.proposedAdvance) {
     const refreshed = getFeature(opts.feature.id, opts.cwd);
     if (refreshed) {
+      let mutationGate: MutationGateResult | undefined;
+      if (mutationSnapshot) {
+        mutationGate = compareMutationSnapshot(mutationSnapshot);
+        Trail.mutationGate(
+          refreshed.id,
+          mutationGate.ok ? "passed" : "failed",
+          mutationGate.root,
+          mutationGate.changedFiles,
+          mutationGate.reason ?? null,
+        );
+        if (!mutationGate.ok) {
+          return { dispatch, advanced: false, mutationGate };
+        }
+      }
       let compileGate: CompileGateResult | undefined;
       if (opts.proposedAdvance === "VERIFIED") {
         compileGate = runCompileOrImportGate({
@@ -112,7 +136,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           `${compileGate.stdout}\n${compileGate.stderr}`.trim().slice(0, 500),
         );
         if (!compileGate.ok) {
-          return { dispatch, advanced: false, compileGate };
+          return { dispatch, advanced: false, compileGate, mutationGate };
         }
       }
       const result = advanceFeature(refreshed, {
@@ -124,7 +148,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         advanced = true;
         newState = opts.proposedAdvance;
       }
-      return { dispatch, advanced, newState, compileGate };
+      return { dispatch, advanced, newState, compileGate, mutationGate };
     }
   }
 

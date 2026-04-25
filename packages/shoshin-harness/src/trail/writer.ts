@@ -92,6 +92,22 @@ export const Trail = {
       outputDigest,
     });
   },
+  mutationGate(
+    feature: string,
+    status: "passed" | "failed",
+    root: string,
+    changedFiles: string[],
+    reason: string | null,
+  ): void {
+    logTrail({
+      kind: "mutation_gate",
+      feature,
+      status,
+      root,
+      changedFiles,
+      reason,
+    });
+  },
   pulse(
     sessionTurns: number,
     elapsedMs: number,
