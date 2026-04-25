@@ -1,0 +1,20 @@
+{
+  "name": "pm-librarian-smoke",
+  "oneLineGoal": "Verify PM + Librarian dispatch through the harness.",
+  "primaryUser": "shoshin developer",
+  "targetLanguages": [
+    "en"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "cli",
+  "primaryStack": {
+    "lang": "go"
+  },
+  "surfaces": [
+    "cli"
+  ],
+  "mathPrimitives": [],
+  "doneInvariants": [
+    "correct"
+  ]
+}
