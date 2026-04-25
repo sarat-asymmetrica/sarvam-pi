@@ -60,6 +60,8 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   let brief = opts.brief;
   let mutationSnapshot: ReturnType<typeof snapshotScope> | null = null;
   const maxRepairAttempts = Math.max(0, opts.maxRepairAttempts ?? 2);
+  let repairBudget = maxRepairAttempts;
+  const hardRepairBudget = shouldMutationGate(opts) ? Math.max(repairBudget, 4) : repairBudget;
 
   if (opts.role === "builder") {
     const architectSnapshot = snapshotScope(opts.cwd, opts.feature.scopePath);
@@ -134,7 +136,8 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 
   // Keep the original scoped baseline across repairs. A failed attempt can still
   // create the valid artifact that a later synthesis/repair attempt reports.
-  for (let attempt = 0; attempt <= maxRepairAttempts; attempt++) {
+  let previousBehaviorFailureSnapshot: ReturnType<typeof snapshotScope> | null = null;
+  for (let attempt = 0; attempt <= repairBudget; attempt++) {
     dispatch = await dispatchSubagent({
       role: opts.role,
       ticketBrief: currentBrief,
@@ -231,9 +234,24 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         );
         if (!htmlBehaviorGate.ok) {
           const reason = htmlBehaviorGateFailureReport(htmlBehaviorGate);
-          if (attempt < maxRepairAttempts && opts.role === "builder") {
-            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
+          const currentBehaviorFailureSnapshot = snapshotScope(opts.cwd, refreshed.scopePath);
+          const behaviorProgress = snapshotChanged(previousBehaviorFailureSnapshot, currentBehaviorFailureSnapshot);
+          previousBehaviorFailureSnapshot = currentBehaviorFailureSnapshot;
+          if (attempt < repairBudget && opts.role === "builder") {
+            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, reason);
             currentBrief = repairBrief(brief, reason, attempt + 1);
+            continue;
+          }
+          if (opts.role === "builder" && behaviorProgress && repairBudget < hardRepairBudget) {
+            repairBudget += 1;
+            const adaptiveReason = [
+              reason,
+              "",
+              "Adaptive repair note: the scoped artifact changed since the previous browser-gate failure, so the harness is granting one extra convergence attempt.",
+              `Repair budget is now ${repairBudget} of hard cap ${hardRepairBudget}.`,
+            ].join("\n");
+            Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, adaptiveReason);
+            currentBrief = repairBrief(brief, adaptiveReason, attempt + 1);
             continue;
           }
           return { dispatch, advanced: false, mutationGate, htmlStaticGate, htmlBehaviorGate };
@@ -292,6 +310,21 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
     htmlStaticGate: lastHtmlStaticGate,
     htmlBehaviorGate: lastHtmlBehaviorGate,
   };
+}
+
+function snapshotChanged(
+  before: ReturnType<typeof snapshotScope> | null,
+  after: ReturnType<typeof snapshotScope>,
+): boolean {
+  if (!before) return true;
+  if (before.root !== after.root) return true;
+  const beforeKeys = Object.keys(before.files);
+  const afterKeys = Object.keys(after.files);
+  if (beforeKeys.length !== afterKeys.length) return true;
+  for (const key of afterKeys) {
+    if (before.files[key] !== after.files[key]) return true;
+  }
+  return false;
 }
 
 function shouldMutationGate(opts: RunTicketOptions): boolean {

@@ -30,6 +30,7 @@ step("Reset fixture", () => {
   rmSync(FIXTURE, { recursive: true, force: true });
   mkdirSync(resolve(FIXTURE, "bad"), { recursive: true });
   mkdirSync(resolve(FIXTURE, "good"), { recursive: true });
+  mkdirSync(resolve(FIXTURE, "safe-alias"), { recursive: true });
 });
 
 step("Create HTML fixtures", () => {
@@ -68,6 +69,24 @@ step("Create HTML fixtures", () => {
     ].join("\n"),
     "utf8",
   );
+  writeFileSync(
+    resolve(FIXTURE, "safe-alias", "index.html"),
+    [
+      "<!doctype html><html><body>",
+      "<form id=\"f\"><input id=\"title\"><button>Add</button></form>",
+      "<ul id=\"out\"></ul>",
+      "<script>",
+      "function escapeHTML(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }",
+      "document.getElementById('f').addEventListener('submit', e => {",
+      "  e.preventDefault();",
+      "  const title = escapeHTML(document.getElementById('title').value);",
+      "  localStorage.setItem('x', title);",
+      "  document.getElementById('out').innerHTML = `<li>${title}</li>`;",
+      "});",
+      "</script></body></html>",
+    ].join("\n"),
+    "utf8",
+  );
   return "  fixtures ready";
 });
 
@@ -85,7 +104,9 @@ step("Run HTML gate driver", () => {
       'if (!bad.issues.some(i => i.code === "unsafe_template_interpolation")) throw new Error(`expected unsafe interpolation issue: ${JSON.stringify(bad)}`);',
       'const good = runHtmlStaticGate(fixture, "good", spec);',
       'if (!good.ok || good.status !== "passed") throw new Error(`expected good fixture to pass: ${JSON.stringify(good)}`);',
-      'console.log(JSON.stringify({ bad: bad.issues.map(i => i.code), good: good.status }, null, 2));',
+      'const safeAlias = runHtmlStaticGate(fixture, "safe-alias", spec);',
+      'if (!safeAlias.ok || safeAlias.status !== "passed") throw new Error(`expected safe alias fixture to pass: ${JSON.stringify(safeAlias)}`);',
+      'console.log(JSON.stringify({ bad: bad.issues.map(i => i.code), good: good.status, safeAlias: safeAlias.status }, null, 2));',
     ].join("\n"),
     "utf8",
   );

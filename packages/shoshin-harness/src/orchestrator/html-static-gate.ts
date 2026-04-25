@@ -68,10 +68,17 @@ function checkHtmlFile(root: string, file: string): HtmlStaticGateIssue[] {
     });
   }
 
+  const safeEscapedIdentifiers = new Set(
+    [...text.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:this|render)\.)?escapeHTML?\s*\(/gi)]
+      .map((match) => match[1])
+      .filter(Boolean),
+  );
+
   const templateInsertions = [...text.matchAll(/\$\{([^}]+)\}/g)].map((m) => m[1] ?? "");
   const riskyInsertions = templateInsertions.filter((expr) => {
     const trimmed = expr.trim();
-    if (/^(this\.)?escapeHtml\(/.test(trimmed)) return false;
+    if (/^(?:(?:this|render)\.)?escapeHTML?\s*\(/i.test(trimmed)) return false;
+    if (safeEscapedIdentifiers.has(trimmed)) return false;
     if (/\.toFixed\(|Number\(|parseFloat\(|parseInt\(|Math\.|Date\(|new Date\(/.test(trimmed)) return false;
     if (/\.length$/.test(trimmed)) return false;
     if (/(\.|^)(id|index|quantity|qty|unitPrice|price|total|amount|count)$/i.test(trimmed)) return false;
