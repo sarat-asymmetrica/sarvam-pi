@@ -430,13 +430,24 @@ function validateToolCall(toolCall: ToolCall): void {
 	}
 }
 
-function parseSarvamToolCall(text: string): ToolCall | undefined {
+function normalizeToolName(name: string, tools?: Tool[]): string {
+	// Sarvam occasionally returns CamelCase variants ("Bash", "Read") even when the
+	// tool catalog advertises lowercase names. Normalize against the available
+	// catalog by case-insensitive match; fall back to lowercase if no exact hit.
+	const trimmed = name.trim();
+	if (!tools?.length) return trimmed.toLowerCase();
+	const lowered = trimmed.toLowerCase();
+	const match = tools.find((t) => t.name.toLowerCase() === lowered);
+	return match?.name ?? lowered;
+}
+
+function parseSarvamToolCall(text: string, tools?: Tool[]): ToolCall | undefined {
 	const toolMatch = text.match(/<tool_call>\s*([A-Za-z0-9_-]+)([\s\S]*?)(?:<\/tool_call>|$)/i);
 	if (!toolMatch) {
 		return undefined;
 	}
 
-	const name = toolMatch[1].trim();
+	const name = normalizeToolName(toolMatch[1], tools);
 	const body = toolMatch[2] ?? "";
 	const args: Record<string, any> = {};
 	const argPattern = /<arg_key>\s*([\s\S]*?)\s*<\/arg_key>\s*<arg_value>\s*([\s\S]*?)\s*<\/arg_value>/gi;
@@ -452,7 +463,7 @@ function parseSarvamToolCall(text: string): ToolCall | undefined {
 	};
 }
 
-function parseNativeToolCall(payload: any): ToolCall | undefined {
+function parseNativeToolCall(payload: any, tools?: Tool[]): ToolCall | undefined {
 	const nativeToolCall = payload.choices?.[0]?.message?.tool_calls?.[0];
 	if (!nativeToolCall?.function?.name) {
 		return undefined;
@@ -472,11 +483,12 @@ function parseNativeToolCall(payload: any): ToolCall | undefined {
 		args = rawArgs;
 	}
 
+	const name = normalizeToolName(nativeToolCall.function.name, tools);
 	return {
 		type: "toolCall",
 		id: nativeToolCall.id ?? `sarvam_tool_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-		name: nativeToolCall.function.name,
-		arguments: normalizeToolArguments(nativeToolCall.function.name, args),
+		name,
+		arguments: normalizeToolArguments(name, args),
 	};
 }
 
@@ -527,7 +539,7 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 
 			let text = getPayloadText(payload);
 
-			const toolCall = parseNativeToolCall(payload) ?? parseSarvamToolCall(text);
+			const toolCall = parseNativeToolCall(payload, context.tools) ?? parseSarvamToolCall(text, context.tools);
 			if (toolCall) {
 				if (forceSynthesis) {
 					payload = await retrySynthesis(
@@ -538,7 +550,7 @@ function streamSarvam(model: Model<any>, context: Context, options?: SimpleStrea
 						options?.signal,
 					);
 					text = getPayloadText(payload);
-					const retryToolCall = parseNativeToolCall(payload);
+					const retryToolCall = parseNativeToolCall(payload, context.tools);
 					if (!retryToolCall && text.trim()) {
 						output.content.push({ type: "text", text });
 						output.usage.input = payload.usage?.prompt_tokens ?? 0;

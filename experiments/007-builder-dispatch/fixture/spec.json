@@ -1,0 +1,21 @@
+{
+  "name": "builder-smoke",
+  "oneLineGoal": "Tiny Go package that greets a user in Sanskrit-friendly style.",
+  "primaryUser": "shoshin developer",
+  "targetLanguages": [
+    "en"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "cli",
+  "primaryStack": {
+    "lang": "go"
+  },
+  "surfaces": [
+    "cli"
+  ],
+  "mathPrimitives": [],
+  "doneInvariants": [
+    "correct",
+    "tested"
+  ]
+}

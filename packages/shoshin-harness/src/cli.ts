@@ -9,6 +9,7 @@ import { runFeatures } from "./features/cli.js";
 import { runMorning, runEvening, runRun } from "./rhythm/cli.js";
 import { runTrail } from "./trail/cli.js";
 import { runRoles } from "./roles/cli.js";
+import { runDispatch } from "./orchestrator/cli.js";
 
 const program = new Command();
 
@@ -43,6 +44,7 @@ program
   )
   .option("--state <state>", "(advance) target state name")
   .option("--evidence <text>", "(advance) evidence text appended to trail")
+  .option("--scope <path>", "(add) feature scope path under which Builder may write")
   .action(async (action: string, name: string | undefined, opts) => {
     await runFeatures(action, name, opts);
   });
@@ -63,6 +65,16 @@ program
   .argument("[name]", "role name (for show / prompt)")
   .action(async (action: string | undefined, name: string | undefined) => {
     await runRoles(action ?? "list", name);
+  });
+
+program
+  .command("dispatch <role> [feature]")
+  .description("One-shot dispatch a role subagent. Optional --advance-to to advance feature on success.")
+  .option("--brief <text>", "override the default ticket brief")
+  .option("--advance-to <state>", "if dispatch ok, advance feature to this state with output as evidence")
+  .option("--timeout-sec <n>", "subagent timeout in seconds (default 240)", "240")
+  .action(async (role: string | undefined, feature: string | undefined, opts) => {
+    await runDispatch(role, feature, opts);
   });
 
 program

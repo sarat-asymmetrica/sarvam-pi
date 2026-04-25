@@ -1,0 +1,21 @@
+{
+  "name": "role-matrix-smoke",
+  "oneLineGoal": "Verify the 7-role catalog works end-to-end with Sarvam.",
+  "primaryUser": "shoshin developer",
+  "targetLanguages": [
+    "en"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "cli",
+  "primaryStack": {
+    "lang": "go"
+  },
+  "surfaces": [
+    "cli"
+  ],
+  "mathPrimitives": [],
+  "doneInvariants": [
+    "correct",
+    "tested"
+  ]
+}

@@ -7,6 +7,7 @@ import { advanceFeature } from "./transitions.js";
 interface FeaturesCliOptions {
   state?: string;
   evidence?: string;
+  scope?: string;
 }
 
 export async function runFeatures(
@@ -18,7 +19,7 @@ export async function runFeatures(
     case "list":
       return listFeatures();
     case "add":
-      return addFeature(name);
+      return addFeature(name, opts);
     case "status":
       return statusFeature(name);
     case "advance":
@@ -41,9 +42,9 @@ function listFeatures(): void {
   }
 }
 
-function addFeature(name: string | undefined): void {
+function addFeature(name: string | undefined, opts: FeaturesCliOptions): void {
   if (!name) {
-    console.error(kleur.red("usage: shoshin features add <name>"));
+    console.error(kleur.red("usage: shoshin features add <name> [--scope path/]"));
     process.exit(2);
   }
   const id = slugify(name);
@@ -58,12 +59,16 @@ function addFeature(name: string | undefined): void {
     name,
     description: "",
     state: "REQUESTED",
+    scopePath: opts.scope,
     createdAt: now,
     updatedAt: now,
     history: [],
   };
   upsertFeature(feature);
-  console.log(kleur.green(`✓ Added feature ${id} (REQUESTED)`));
+  console.log(
+    kleur.green(`✓ Added feature ${id} (REQUESTED)`) +
+      (opts.scope ? kleur.gray(` scope=${opts.scope}`) : ""),
+  );
 }
 
 function statusFeature(name: string | undefined): void {
