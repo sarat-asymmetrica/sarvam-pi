@@ -1,0 +1,88 @@
+{
+  "fixtures": [
+    {
+      "id": "english-kirana",
+      "language": "en",
+      "scriptName": "Kirana shopkeeper — daily sales ledger",
+      "userTurns": [
+        "hi so i want some kind of app to track my shop expenses and sales, everyday i write in a notebook but its getting messy",
+        "yes kirana store, small one near my house. daily maybe 50-100 items sell but i dont track properly which items selling more",
+        "mobile app would be good, i use android. my accountant comes only end of month so i need something simple between that",
+        "basically enter how much cash came in, how much went out for buying stock, thats the main thing. if it can show me which day was best that would be nice",
+        "no no i dont need anything fancy, just like a daily hisaab. maybe show total profit at end of week also",
+        "i dont know coding or anything, should be simple to use. even my wife should be able to enter if im busy"
+      ],
+      "expectedSpec": {
+        "name": "kirana-daily-ledger",
+        "oneLineGoal": "Simple daily cash-in / cash-out ledger for a kirana store with weekly profit summary",
+        "primaryUser": "kirana store owner, non-technical, Android phone",
+        "appShape": "mobile",
+        "primaryStack": { "lang": "ts" },
+        "targetLanguages": ["en"]
+      },
+      "expectedHostMarkers": [
+        "shop|kirana|store",
+        "daily|hisaab|ledger",
+        "android|mobile|phone",
+        "cash|expense|profit",
+        "?"
+      ]
+    },
+    {
+      "id": "hindi-bhajan",
+      "language": "hi",
+      "scriptName": "Bhajan mandali admin — daily bhajan sharing app",
+      "userTurns": [
+        "हमारे bhajan group के लिए एक app बनानी है, हम रोज़ सुबह एक भजन share करते हैं WhatsApp पर",
+        "group में कोई 30-35 लोग हैं, mostly aunties और uncles, सब phone use करते हैं but WhatsApp तक ही सीमित हैं",
+        "problem यह है कि हर रोज़ मुझे manually audio और lyrics दोनों भेजनी पड़ती है, बहुत time लगता है",
+        "हाँ अगर एक जगह सब bhajan store हो जाएं और daily automatically भेज दे तो बहुत अच्छा होगा, playlist जैसा",
+        "Hindi और कुछ Sanskrit shlokas भी होते हैं, lyrics Devanagari में चाहिए, audio mp3 format में हमारे पास है",
+        "simple रखो, मुझे कोई बड़ी website नहीं चाहिए, बस एक simple app जो mera kaam aasaan kare"
+      ],
+      "expectedSpec": {
+        "name": "bhajan-mandali-app",
+        "oneLineGoal": "Daily bhajan scheduler that auto-sends audio and Devanagari lyrics to a WhatsApp/group feed",
+        "primaryUser": "bhajan group admin, middle-aged, non-technical",
+        "appShape": "web",
+        "primaryStack": { "lang": "ts" },
+        "targetLanguages": ["hi", "sa"]
+      },
+      "expectedHostMarkers": [
+        "भजन|bhajan",
+        "group|ग्रुप",
+        "audio|lyrics|गाना",
+        "daily|रोज़|automatically",
+        "?"
+      ]
+    },
+    {
+      "id": "marathi-bhagwad-gita",
+      "language": "mr",
+      "scriptName": "Maushi's Bhagavad Gita study group — shloka + attendance tracker",
+      "userTurns": [
+        "हो, म्हणजे आमच्या गीता गटासाठी काहीतरी करायचंय, आम्ही दर शनिवारी भेटतो, पण मला या computer बिटर जास्त माहित नाही बघा",
+        "गटात पंधरा-वीस बायका आहेत, आम्ही गीतेचा एकेक अध्याय घेतो, कोणी आलं नाही तर त्यांना WhatsApp वर श्लोक पाठवतो",
+        "हो WhatsApp वर पाठवतो आम्ही, पण रोज manually टाइप करावं लागतं, खूप वेळ जातो, चुका पण होतात",
+        "आणि कोण किती वेळा आलं ते पण लिहून ठेवायचं असतं, डायरीत लिहितो पण ते नीट होत नाही",
+        "phone वर दिसलं पाहिजे, माझ्या सुनेनं सांगितलं की app करता येतं म्हणून, मला काहीच माहित नाही पण ती मदत करेल",
+        "श्लोक मराठीत असतात, थोडे संस्कृत पण, फोटो पण असतात कधी कधी"
+      ],
+      "expectedSpec": {
+        "name": "geeta-gat-app",
+        "oneLineGoal": "Bhagavad Gita study group app to share daily shlokas in Marathi/Sanskrit and track member attendance",
+        "primaryUser": "Marathi-speaking aunty in her 60s running a devotional study group, non-technical",
+        "appShape": "mobile",
+        "primaryStack": { "lang": "ts" },
+        "targetLanguages": ["mr", "sa"]
+      },
+      "expectedHostMarkers": [
+        "गीता|गट|गीता गट",
+        "श्लोक|shloka",
+        "WhatsApp|फोन|phone",
+        "हजेरी|attendance|आल",
+        "?"
+      ]
+    }
+  ]
+}

@@ -70,6 +70,26 @@ Three layered prompt fragments port Ananta's user-facing intelligence into Shosh
 
 Source: `src/personas/asya.ts` exporting `ASYA_TRAITS`, `ASYA_EQ`, `ASYA_COGNITION`, `ASYA_FULL`, `ASYA_LIGHT`. Roles import what they need; rigour and warmth coexist by composition.
 
+### Conversational Discovery (B8)
+
+The `shoshin spec` command runs a host-led warm conversation in your language. Devanagari script triggers Hindi/Marathi detection (Marathi disambiguated by lexical markers like आहे/मला/बघा); Tamil/Telugu/Kannada/Bengali/Gujarati/Punjabi all detected by script range.
+
+```bash
+shoshin spec
+# 🌱  Discovery — let's build your project together.
+# Could you tell me what you want the app to help people do?
+> मला माझ्या गीता गटासाठी अॅप करायचे आहे
+# तुम्ही तुमच्या गीता गटासाठी काहीतरी करायचंय...
+```
+
+The conversation produces a validated `ProjectSpec` where:
+- **JSON keys are English** (machine-readable: `oneLineGoal`, `primaryUser`, `appShape`)
+- **Free-text values stay in the user's language** verbatim (`"oneLineGoal": "गीता गटासाठी श्लोक पाठवणे..."`)
+
+Type `/done` to wrap up early. Add `--canned` to use the offline 12-question English form. Use `--non-interactive <file.json>` for scripted setup.
+
+See [`examples/discovery-marathi-bhagwad-gita/`](../../examples/discovery-marathi-bhagwad-gita/) for a full captured transcript (an actual aunty's conversation about building an app for her bhagwad gita group).
+
 ### Warm Chat Surface
 
 ```bash

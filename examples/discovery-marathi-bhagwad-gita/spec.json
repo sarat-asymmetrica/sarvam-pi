@@ -1,0 +1,26 @@
+{
+  "name": "geeta-group-app",
+  "oneLineGoal": "गीता गटासाठी श्लोक पाठवणे आणि उपस्थिती नोंदवण्यासाठी सोपे ॲप",
+  "primaryUser": "गीतेचा अभ्यास करणारा पंधरा-वीस बायकांचा गट",
+  "targetLanguages": [
+    "mr",
+    "en"
+  ],
+  "scaffoldMode": "lite",
+  "appShape": "mobile",
+  "primaryStack": {
+    "lang": "ts"
+  },
+  "surfaces": [
+    "cli"
+  ],
+  "mathPrimitives": [],
+  "doneInvariants": [
+    "correct",
+    "tested",
+    "observable"
+  ],
+  "notes": "वापरकर्त्यांना phone वर दिसेल असे mobile app सुचवले आहे; नाव आणि ध्येय वापरकर्त्याच्या भाषेत ठेवले आहे.",
+  "createdAt": "2026-04-25T03:10:44.178Z",
+  "source": "interview"
+}

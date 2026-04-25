@@ -33,8 +33,11 @@ program
 
 program
   .command("spec")
-  .description("Run the discovery interview and write .shoshin/spec.json.")
+  .description(
+    "Discovery interview → .shoshin/spec.json. Default: host-led warm conversation in your language. Add --canned for the offline 12-question form.",
+  )
   .option("--non-interactive <file>", "Write a pre-filled spec from a JSON file (skips interview).")
+  .option("--canned", "Use the canned 12-question English interview instead of host-led discovery.")
   .action(async (opts) => {
     await runSpec(opts);
   });
