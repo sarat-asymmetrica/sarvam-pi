@@ -68,8 +68,9 @@ program
 program
   .command("report <feature>")
   .description("Summarize one feature: state, sessions, gates, repairs, tokens, artifacts, and latest block.")
-  .action(async (feature: string | undefined) => {
-    await runReport(feature);
+  .option("--html", "write a local HTML report under .shoshin/reports/")
+  .action(async (feature: string | undefined, opts) => {
+    await runReport(feature, opts);
   });
 
 program

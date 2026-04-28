@@ -24,7 +24,7 @@ Reliability means:
 | 40 | Complete | Feature report command | `shoshin report <feature>` summarizes status, sessions, gates, repairs, tokens, and artifacts. |
 | 41 | Complete | Plain product language | Neutralize exposed internal framing into clean user-facing CLI/output copy. |
 | 42 | Complete | Real task ladder | Define and add fixtures for progressively harder tasks from single-file SPA to existing-codebase modification. |
-| 43 | Planned | HTML report / local dashboard seed | Generate a simple local run report with artifact links and gate timeline. |
+| 43 | Complete | HTML report / local dashboard seed | Generate a simple local run report with artifact links and gate timeline. |
 | 44 | Planned | Human steering checkpoints | Add approve-plan, repair-manually-then-resume, and ambiguity pause hooks. |
 | 45 | Planned | Multilingual task loop | Route multilingual user intent through the simplified loop while preserving free-text values verbatim. |
 
@@ -72,3 +72,7 @@ Bundle 41 complete. Updated public CLI/help/report language toward simple produc
 ### 2026-04-28 06:48 IST
 
 Bundle 42 complete. Added `docs/REAL_TASK_LADDER.md` plus the machine-readable `experiments/042-real-task-ladder/task-ladder.json` and smoke 042. The ladder now defines active rungs for single-file SPA, multi-action SPA, and scoped library implementation, with planned rungs through fullstack and refactor work.
+
+### 2026-04-28 07:00 IST
+
+Bundle 43 complete. Added `shoshin report <feature> --html`, writing `.shoshin/reports/<feature>.html` with state, metrics, gates, artifacts, and latest blocked result. Smoke 040 now covers terminal and HTML report output.

@@ -4,7 +4,7 @@
 // use, artifacts, and the latest quality block from ordinary project files.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,6 +71,28 @@ for (const needle of [
   "Patch event path.",
 ]) {
   assert.match(result.stdout, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), result.stdout);
+}
+
+const htmlResult = spawnSync(process.execPath, [TSX_BIN, SHOSHIN_CLI, "report", "practice-planner", "--html"], {
+  cwd: FIXTURE,
+  encoding: "utf8",
+  timeout: 120_000,
+});
+assert.equal(htmlResult.status, 0, `${htmlResult.stderr}\n${htmlResult.stdout}`);
+const htmlPath = resolve(FIXTURE, ".shoshin", "reports", "practice-planner.html");
+assert.ok(existsSync(htmlPath), `missing ${htmlPath}`);
+const html = readFileSync(htmlPath, "utf8");
+for (const needle of [
+  "<!doctype html>",
+  "Run Summary",
+  "Gates",
+  "Artifacts",
+  "Latest Blocked Result",
+  "Final answer cleanups",
+  "app/index.html",
+  "Patch event path.",
+]) {
+  assert.match(html, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), html);
 }
 
 console.log("040 feature report smoke passed");

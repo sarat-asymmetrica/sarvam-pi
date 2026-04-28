@@ -1,13 +1,18 @@
 // Feature report CLI. Product-phase choice: turn trail + feature state into a
 // compact user-facing run summary so blocked and successful runs are both easy
 // to understand without reading JSONL.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import kleur from "kleur";
 import { getFeature } from "../features/store.js";
 import { slugify } from "../features/types.js";
 import { readTrail } from "../trail/reader.js";
 import { TrailRecord } from "../trail/types.js";
+import { shoshinDir } from "../util/paths.js";
+
+interface ReportCliOptions {
+  html?: boolean;
+}
 
 export interface FeatureReport {
   feature: {
@@ -34,7 +39,7 @@ export interface FeatureReport {
   artifacts: string[];
 }
 
-export async function runReport(featureName: string | undefined): Promise<void> {
+export async function runReport(featureName: string | undefined, opts: ReportCliOptions = {}): Promise<void> {
   if (!featureName) {
     console.error(kleur.red("usage: shoshin report <feature>"));
     process.exit(2);
@@ -50,6 +55,12 @@ export async function runReport(featureName: string | undefined): Promise<void> 
   if (!report) {
     console.error(kleur.red(`feature not found: ${featureName}`));
     process.exit(2);
+  }
+  if (opts.html) {
+    const outPath = writeHtmlReport(report, cwd);
+    printReport(report);
+    console.log(kleur.green(`HTML report: ${outPath}`));
+    return;
   }
   printReport(report);
 }
@@ -132,6 +143,104 @@ function printReport(report: FeatureReport): void {
   console.log("");
 }
 
+export function writeHtmlReport(report: FeatureReport, cwd = process.cwd()): string {
+  const reportDir = join(shoshinDir(cwd), "reports");
+  mkdirSync(reportDir, { recursive: true });
+  const outPath = join(reportDir, `${report.feature.id}.html`);
+  writeFileSync(outPath, renderHtmlReport(report), "utf8");
+  return outPath;
+}
+
+export function renderHtmlReport(report: FeatureReport): string {
+  const stateClass = report.latestQualityBlock ? "blocked" : report.feature.state === "MODEL_DONE" || report.feature.state === "DONE" ? "done" : "active";
+  const gates = report.gates.length
+    ? report.gates.slice(-12).map((gate) => `<li><span class="pill ${escapeAttr(gate.status)}">${escapeHtml(gate.status)}</span><strong>${escapeHtml(gate.gate)}</strong>${gate.reason ? `<span>${escapeHtml(gate.reason)}</span>` : ""}</li>`).join("")
+    : `<li class="muted">No gates recorded yet.</li>`;
+  const artifacts = report.artifacts.length
+    ? report.artifacts.slice(0, 20).map((artifact) => `<li><a href="../../${escapeAttr(artifact)}">${escapeHtml(artifact)}</a></li>`).join("")
+    : `<li class="muted">No artifacts found in scope.</li>`;
+  const block = report.latestQualityBlock
+    ? `<section>
+        <h2>Latest Blocked Result</h2>
+        <dl>
+          <dt>Gate</dt><dd>${escapeHtml(report.latestQualityBlock.gate)}</dd>
+          <dt>Reason</dt><dd>${escapeHtml(report.latestQualityBlock.reason)}</dd>
+          <dt>Repairs</dt><dd>${report.latestQualityBlock.repairAttempts}</dd>
+          <dt>Changed files</dt><dd>${escapeHtml(report.latestQualityBlock.changedFiles.join(", ") || "(none)")}</dd>
+          <dt>Next</dt><dd>${escapeHtml(report.latestQualityBlock.nextAction)}</dd>
+        </dl>
+      </section>`
+    : "";
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(report.feature.name)} report</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1d2528; background: #f6f7f4; }
+    body { margin: 0; }
+    main { max-width: 980px; margin: 0 auto; padding: 32px 20px 48px; }
+    header { border-bottom: 1px solid #d9ded7; padding-bottom: 18px; margin-bottom: 22px; }
+    h1 { margin: 0 0 8px; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
+    h2 { margin: 0 0 12px; font-size: 18px; letter-spacing: 0; }
+    section { background: #ffffff; border: 1px solid #dfe4dd; border-radius: 8px; padding: 18px; margin: 14px 0; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; color: #566165; }
+    .status { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
+    .status.done { background: #dcefe3; color: #15572c; }
+    .status.blocked { background: #f8ded9; color: #8a1f12; }
+    .status.active { background: #e4edf7; color: #164b7a; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .metric { border: 1px solid #e2e6df; border-radius: 8px; padding: 12px; background: #fbfcfa; }
+    .metric span { display: block; color: #667277; font-size: 13px; }
+    .metric strong { display: block; font-size: 24px; margin-top: 4px; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 8px 0; }
+    a { color: #0f5d73; }
+    .pill { display: inline-block; min-width: 58px; text-align: center; border-radius: 999px; padding: 2px 8px; margin-right: 8px; font-size: 12px; font-weight: 700; background: #e8ece8; color: #354044; }
+    .pill.passed { background: #dcefe3; color: #15572c; }
+    .pill.failed { background: #f8ded9; color: #8a1f12; }
+    .pill.skipped { background: #ece8dc; color: #695118; }
+    dl { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0; }
+    dt { color: #667277; }
+    dd { margin: 0; }
+    .muted { color: #667277; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>${escapeHtml(report.feature.name)}</h1>
+      <div class="meta">
+        <span class="status ${stateClass}">${escapeHtml(report.feature.state)}</span>
+        <span>${escapeHtml(report.feature.id)}</span>
+        <span>Scope: ${escapeHtml(report.feature.scopePath ?? "(none)")}</span>
+        <span>Updated: ${escapeHtml(report.feature.updatedAt)}</span>
+      </div>
+    </header>
+    <section>
+      <h2>Run Summary</h2>
+      <div class="grid">
+        <div class="metric"><span>Repairs</span><strong>${report.counts.repairs}</strong></div>
+        <div class="metric"><span>Sessions</span><strong>${report.counts.sessions}</strong></div>
+        <div class="metric"><span>Tokens</span><strong>${report.counts.totalTokens}</strong></div>
+        <div class="metric"><span>Final answer cleanups</span><strong>${report.counts.toolEchoSyntheses}</strong></div>
+      </div>
+    </section>
+    <section>
+      <h2>Gates</h2>
+      <ul>${gates}</ul>
+    </section>
+    <section>
+      <h2>Artifacts</h2>
+      <ul>${artifacts}</ul>
+    </section>
+    ${block}
+  </main>
+</body>
+</html>`;
+}
+
 function uniqueSessions(records: Extract<TrailRecord, { kind: "session_summary" }>[]): string[] {
   return [...new Set(records.map((record) => record.piSessionId).filter((id): id is string => Boolean(id)))];
 }
@@ -180,4 +289,17 @@ function listArtifacts(cwd: string, scopePath?: string): string[] {
   };
   visit(root);
   return out.sort();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttr(value: string): string {
+  return escapeHtml(value).replace(/`/g, "&#96;");
 }
