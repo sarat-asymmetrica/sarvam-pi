@@ -21,14 +21,13 @@ program
   .name("shoshin")
   .description(
     kleur.cyan("Shoshin") +
-      " — vibe-coder AI coding harness on Sarvam 105B.\n" +
-      "  Plan → autonomous run → reconvene. 7 roles, persona pairs, stigmergy trail.",
+      " — a local coding assistant for planning, building, checking, and repairing app work.",
   )
   .version("0.1.0-foundation");
 
 program
   .command("init [name]")
-  .description("Initialize a new Shoshin project (creates .shoshin/ and stub files).")
+  .description("Start a project workspace (creates .shoshin/ and starter files).")
   .action(async (name?: string) => {
     await runInit(name);
   });
@@ -36,10 +35,10 @@ program
 program
   .command("spec")
   .description(
-    "Discovery interview → .shoshin/spec.json. Default: host-led warm conversation in your language. Add --canned for the offline 12-question form.",
+    "Create or import the project brief. Default: guided conversation in your language.",
   )
-  .option("--non-interactive <file>", "Write a pre-filled spec from a JSON file (skips interview).")
-  .option("--canned", "Use the canned 12-question English interview instead of host-led discovery.")
+  .option("--non-interactive <file>", "Write a pre-filled project brief from a JSON file.")
+  .option("--canned", "Use the offline 12-question English form.")
   .action(async (opts) => {
     await runSpec(opts);
   });
@@ -47,7 +46,7 @@ program
 program
   .command("features <action> [name]")
   .description(
-    "Manage the Feature Done Contract state machine. Actions: list | add | status | advance.",
+    "Manage tasks. Actions: list | add | status | advance.",
   )
   .option("--state <state>", "(advance) target state name")
   .option("--evidence <text>", "(advance) evidence text appended to trail")
@@ -58,7 +57,7 @@ program
 
 program
   .command("trail [action]")
-  .description("Inspect the stigmergy trail. Actions: tail | filter | clear (default tail).")
+  .description("Inspect the activity log. Actions: tail | filter | clear (default tail).")
   .option("-n, --count <n>", "tail count (default 20)", "20")
   .option("--feature <name>", "filter by feature name")
   .option("--role <role>", "filter by role")
@@ -75,7 +74,7 @@ program
 
 program
   .command("roles [action]")
-  .description("Inspect role catalog. Actions: list | show <role> | prompt <role> (default list).")
+  .description("Inspect worker roles. Actions: list | show <role> | prompt <role> (default list).")
   .argument("[name]", "role name (for show / prompt)")
   .action(async (action: string | undefined, name: string | undefined) => {
     await runRoles(action ?? "list", name);
@@ -83,7 +82,7 @@ program
 
 program
   .command("scaffold-math")
-  .description("Copy math primitives selected from ProjectSpec into <app>/internal/math/.")
+  .description("Copy selected math helpers into <app>/internal/math/.")
   .option("--dry-run", "show selection without writing files")
   .action(async (opts) => {
     await runScaffoldMath(opts);
@@ -91,20 +90,20 @@ program
 
 program
   .command("dispatch <role> [feature]")
-  .description("One-shot dispatch a role subagent. Optional --advance-to to advance feature on success.")
+  .description("Ask one worker role to handle a task. Optional --advance-to updates task state on success.")
   .option("--brief <text>", "override the default ticket brief")
   .option("--advance-to <state>", "if dispatch ok, advance feature to this state with output as evidence")
-  .option("--timeout-sec <n>", "subagent timeout in seconds (default 240)", "240")
+  .option("--timeout-sec <n>", "worker timeout in seconds (default 240)", "240")
   .action(async (role: string | undefined, feature: string | undefined, opts) => {
     await runDispatch(role, feature, opts);
   });
 
 program
   .command("morning")
-  .description("Plan-of-day flow: generate today's tickets and brief Sarvam.")
+  .description("Plan today's task queue.")
   .option(
     "--no-sarvam-briefs",
-    "skip PM-driven brief generation; use template briefs only",
+    "skip AI-written task briefs; use template briefs only",
   )
   .action(async (opts) => {
     // commander negates --no-sarvam-briefs into opts.sarvamBriefs = false
@@ -113,10 +112,10 @@ program
 
 program
   .command("run")
-  .description("Autonomous run. Orchestrator dispatches role subagents until tickets exhausted.")
+  .description("Run the planned task queue.")
   .option("--max-turns <n>", "max orchestrator turns (default 20)", "20")
-  .option("--timeout-sec <n>", "per-ticket subagent timeout (default 300)", "300")
-  .option("--dry-run", "log dispatch decisions without spawning subagents")
+  .option("--timeout-sec <n>", "per-task worker timeout (default 300)", "300")
+  .option("--dry-run", "show task decisions without running workers")
   .action(async (opts) => {
     await runRun(opts);
   });
@@ -124,10 +123,10 @@ program
 program
   .command("chat [question...]")
   .description(
-    "One-shot warm conversation with the host (Tagore + Carl Rogers + Asya pillars). " +
+    "Ask a project question or talk through what to build next. " +
       "Pass a question inline or run with no args to type interactively.",
   )
-  .option("--timeout-sec <n>", "host dispatch timeout in seconds (default 120)", "120")
+  .option("--timeout-sec <n>", "chat timeout in seconds (default 120)", "120")
   .action(async (questionParts: string[] | undefined, opts) => {
     const question = (questionParts ?? []).join(" ").trim() || undefined;
     await runChat({ question, timeoutSec: opts.timeoutSec });
@@ -135,8 +134,8 @@ program
 
 program
   .command("browser-check [task...]")
-  .description("Run an optional browser-use browser task and log a browser_check trail event.")
-  .option("--feature <name>", "feature id to attach to the trail event")
+  .description("Run an optional browser check and record the result.")
+  .option("--feature <name>", "task id to attach to the log event")
   .option("--timeout-sec <n>", "browser-use timeout in seconds (default 180)", "180")
   .option("--require-installed", "fail instead of skip when browser-use is not installed")
   .action(async (taskParts: string[] | undefined, opts) => {
@@ -145,7 +144,7 @@ program
 
 program
   .command("evening")
-  .description("Reconvene flow: summarize day, propose memory updates, run Librarian compaction.")
+  .description("Review today's progress and propose memory updates.")
   .option("--no-prompt", "skip interactive MEMORY.md append confirmation")
   .action(async (opts) => {
     await runEvening({ noPrompt: !opts.prompt });

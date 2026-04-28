@@ -22,7 +22,7 @@ Reliability means:
 | --- | --- | --- | --- |
 | 39 | Complete | Blocked-result diagnostics | Quality-blocked runs show last gate, repeated signature, changed files, and next action. |
 | 40 | Complete | Feature report command | `shoshin report <feature>` summarizes status, sessions, gates, repairs, tokens, and artifacts. |
-| 41 | Planned | Plain product language | Neutralize exposed internal framing into clean user-facing CLI/output copy. |
+| 41 | Complete | Plain product language | Neutralize exposed internal framing into clean user-facing CLI/output copy. |
 | 42 | Planned | Real task ladder | Define and add fixtures for progressively harder tasks from single-file SPA to existing-codebase modification. |
 | 43 | Planned | HTML report / local dashboard seed | Generate a simple local run report with artifact links and gate timeline. |
 | 44 | Planned | Human steering checkpoints | Add approve-plan, repair-manually-then-resume, and ambiguity pause hooks. |
@@ -64,3 +64,7 @@ Bundle 39 complete. Added structured `quality_block` diagnostics to the run resu
 ### 2026-04-28 06:35 IST
 
 Bundle 40 complete. Added `shoshin report <feature>` with feature state, scope, sessions, token totals, repairs, gates, artifacts, tool-echo syntheses, and latest quality block. Smoke 040 covers report output from ordinary `.shoshin` files.
+
+### 2026-04-28 06:42 IST
+
+Bundle 41 complete. Updated public CLI/help/report language toward simple product terms: project brief, tasks, workers, activity log, blocked result, and final answer cleanups. Smoke 041 prevents internal terms from leaking into top-level help.

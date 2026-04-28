@@ -64,10 +64,10 @@ for (const needle of [
   "State: SCAFFOLDED",
   "Repairs: 1",
   "Tokens: 15",
-  "Tool echo syntheses: 1",
+  "Final answer cleanups: 1",
   "browser: failed",
   "app/index.html",
-  "Latest Quality Block",
+  "Latest Blocked Result",
   "Patch event path.",
 ]) {
   assert.match(result.stdout, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), result.stdout);

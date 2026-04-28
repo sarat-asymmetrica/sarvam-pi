@@ -100,7 +100,7 @@ export async function runDispatch(
     console.log(kleur.yellow(`✗ Feature did NOT advance (dispatch ok=${r.dispatch.ok})`));
   }
   if (!r.advanced && advance && r.qualityBlock) {
-    console.log(kleur.bold("\n=== Quality Block ==="));
+      console.log(kleur.bold("\n=== Blocked Result ==="));
     console.log(`${kleur.yellow("Gate:")} ${r.qualityBlock.gate}`);
     console.log(`${kleur.yellow("Reason:")} ${r.qualityBlock.reason}`);
     console.log(`${kleur.yellow("Repairs:")} ${r.qualityBlock.repairAttempts}`);

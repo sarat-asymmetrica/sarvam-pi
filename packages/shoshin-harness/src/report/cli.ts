@@ -102,7 +102,7 @@ function printReport(report: FeatureReport): void {
   console.log(`Repairs: ${report.counts.repairs}`);
   console.log(`Sessions: ${report.counts.sessions}`);
   console.log(`Tokens: ${report.counts.totalTokens}`);
-  console.log(`Tool echo syntheses: ${report.counts.toolEchoSyntheses}`);
+  console.log(`Final answer cleanups: ${report.counts.toolEchoSyntheses}`);
   console.log("");
   console.log(kleur.bold("Gates"));
   if (report.gates.length) {
@@ -122,7 +122,7 @@ function printReport(report: FeatureReport): void {
   }
   if (report.latestQualityBlock) {
     console.log("");
-    console.log(kleur.bold("Latest Quality Block"));
+    console.log(kleur.bold("Latest Blocked Result"));
     console.log(`Gate: ${report.latestQualityBlock.gate}`);
     console.log(`Reason: ${report.latestQualityBlock.reason}`);
     console.log(`Repairs: ${report.latestQualityBlock.repairAttempts}`);
