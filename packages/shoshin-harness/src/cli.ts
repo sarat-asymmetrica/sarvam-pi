@@ -13,6 +13,7 @@ import { runDispatch } from "./orchestrator/cli.js";
 import { runScaffoldMath } from "./templates/cli.js";
 import { runChat } from "./chat/cli.js";
 import { runBrowserCheck } from "./browser/cli.js";
+import { runReport } from "./report/cli.js";
 
 const program = new Command();
 
@@ -63,6 +64,13 @@ program
   .option("--role <role>", "filter by role")
   .action(async (action: string | undefined, opts) => {
     await runTrail(action ?? "tail", opts);
+  });
+
+program
+  .command("report <feature>")
+  .description("Summarize one feature: state, sessions, gates, repairs, tokens, artifacts, and latest block.")
+  .action(async (feature: string | undefined) => {
+    await runReport(feature);
   });
 
 program

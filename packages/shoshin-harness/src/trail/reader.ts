@@ -2,11 +2,15 @@
 // taking action — this is the substrate that replaces a message bus. Filters by
 // kind, feature, role, or session.
 import { TrailKind, TrailRecord } from "./types.js";
-import { readJsonlTail } from "../util/json-io.js";
+import { readJsonlOr, readJsonlTail } from "../util/json-io.js";
 import { shoshinFile } from "../util/paths.js";
 
 export function readTrailTail(n = 50, cwd?: string): TrailRecord[] {
   return readJsonlTail<TrailRecord>(shoshinFile("trail", cwd), n);
+}
+
+export function readTrail(cwd?: string): TrailRecord[] {
+  return readJsonlOr<TrailRecord>(shoshinFile("trail", cwd), []);
 }
 
 export interface TrailFilter {

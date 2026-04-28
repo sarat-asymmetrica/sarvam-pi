@@ -41,3 +41,14 @@ export function readJsonlTail<T>(path: string, n: number): T[] {
   const lines = raw.split("\n").filter((line) => line.trim().length > 0);
   return lines.slice(-n).map((line) => JSON.parse(line) as T);
 }
+
+export function readJsonlOr<T>(path: string, fallback: T[]): T[] {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return fallback;
+    throw err;
+  }
+  return raw.split("\n").filter((line) => line.trim().length > 0).map((line) => JSON.parse(line) as T);
+}

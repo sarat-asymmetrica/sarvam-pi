@@ -21,7 +21,7 @@ Reliability means:
 | Bundle | Status | Theme | Target Outcome |
 | --- | --- | --- | --- |
 | 39 | Complete | Blocked-result diagnostics | Quality-blocked runs show last gate, repeated signature, changed files, and next action. |
-| 40 | Planned | Feature report command | `shoshin report <feature>` summarizes status, sessions, gates, repairs, tokens, and artifacts. |
+| 40 | Complete | Feature report command | `shoshin report <feature>` summarizes status, sessions, gates, repairs, tokens, and artifacts. |
 | 41 | Planned | Plain product language | Neutralize exposed internal framing into clean user-facing CLI/output copy. |
 | 42 | Planned | Real task ladder | Define and add fixtures for progressively harder tasks from single-file SPA to existing-codebase modification. |
 | 43 | Planned | HTML report / local dashboard seed | Generate a simple local run report with artifact links and gate timeline. |
@@ -60,3 +60,7 @@ Created this manifest and started Bundle 39.
 ### 2026-04-28 06:20 IST
 
 Bundle 39 complete. Added structured `quality_block` diagnostics to the run result, trail, and dispatch CLI. Covered gate summaries and exhausted dispatch failures with smoke 039. Dogfood passed cleanly after the change.
+
+### 2026-04-28 06:35 IST
+
+Bundle 40 complete. Added `shoshin report <feature>` with feature state, scope, sessions, token totals, repairs, gates, artifacts, tool-echo syntheses, and latest quality block. Smoke 040 covers report output from ordinary `.shoshin` files.
