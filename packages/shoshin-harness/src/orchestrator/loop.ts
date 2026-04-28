@@ -24,6 +24,10 @@ import { runHtmlStaticGate, HtmlStaticGateResult } from "./html-static-gate.js";
 import { runHtmlBehaviorGate, HtmlBehaviorGateResult } from "./html-behavior-gate.js";
 import { Trail } from "../trail/writer.js";
 
+const ARCHITECT_PLAN_PROMPT_LIMIT = 6_000;
+const REPAIR_TICKET_PROMPT_LIMIT = 3_500;
+const REPAIR_REASON_PROMPT_LIMIT = 2_500;
+
 export interface RunTicketOptions {
   role: RoleName;
   feature: Feature;
@@ -117,7 +121,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       opts.brief,
       "",
       "=== Architect plan ===",
-      architect.output,
+      compactPromptText(architect.output, ARCHITECT_PLAN_PROMPT_LIMIT),
       "",
       "Use the plan as guidance, but verify against the actual files before editing.",
     ].join("\n");
@@ -331,17 +335,19 @@ function shouldMutationGate(opts: RunTicketOptions): boolean {
   return opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE";
 }
 
-function repairBrief(originalBrief: string, reason: string, attempt: number): string {
+export function repairBrief(originalBrief: string, reason: string, attempt: number): string {
   return [
-    originalBrief,
+    compactRepairTicket(originalBrief),
     "",
     `=== Repair attempt ${attempt} ===`,
     "Your previous attempt was blocked by the harness quality gates.",
+    "This is a same-session repair turn; the full original ticket and prior tool context are already in the Pi session.",
     "Fix only the issues below. Do not restart from scratch if a scoped artifact already exists.",
     "Read the relevant file first, make the smallest targeted edit, then verify again.",
     "Preserve the user's intent, but obey the current capability envelope exactly.",
     "",
-    reason,
+    "Gate failure summary:",
+    compactPromptText(reason, REPAIR_REASON_PROMPT_LIMIT),
   ].join("\n");
 }
 
@@ -352,10 +358,11 @@ export function browserRepairBrief(
   scopePath?: string,
 ): string {
   return [
-    originalBrief,
+    compactRepairTicket(originalBrief),
     "",
     `=== Browser repair attempt ${attempt} ===`,
     "Your previous attempt was blocked by the deterministic browser behavior gate.",
+    "This is a same-session repair turn; the full original ticket and prior tool context are already in the Pi session.",
     "This is a debugging task, not a rewrite task. Preserve the existing app and patch only the broken interaction path.",
     "",
     "Mandatory repair protocol:",
@@ -366,8 +373,25 @@ export function browserRepairBrief(
     "5. Do not redesign the UI, rename unrelated selectors, add dependencies, start servers, or use network commands.",
     "6. Final response must name the patched path and why the browser assertion should now pass.",
     "",
-    reason,
+    "Gate failure summary:",
+    compactPromptText(reason, REPAIR_REASON_PROMPT_LIMIT),
   ].join("\n");
+}
+
+export function compactRepairTicket(originalBrief: string): string {
+  return [
+    "=== Ticket context summary ===",
+    compactPromptText(originalBrief, REPAIR_TICKET_PROMPT_LIMIT),
+  ].join("\n");
+}
+
+export function compactPromptText(text: string, limit: number): string {
+  const normalized = text.trim();
+  if (normalized.length <= limit) return normalized;
+  const marker = `\n\n[...${normalized.length - limit} chars omitted; keeping head and tail for repair context...]\n\n`;
+  const headLength = Math.max(0, Math.ceil((limit - marker.length) * 0.6));
+  const tailLength = Math.max(0, limit - marker.length - headLength);
+  return `${normalized.slice(0, headLength).trimEnd()}${marker}${normalized.slice(-tailLength).trimStart()}`;
 }
 
 function scopeViolationFailureReport(dispatch: DispatchResult, opts: RunTicketOptions): string | null {

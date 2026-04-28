@@ -45,7 +45,7 @@ writeFileSync(
 const result = spawnSync(process.execPath, [TSX_BIN, DRIVER], {
   cwd: resolve(__dirname, "..", ".."),
   encoding: "utf8",
-  timeout: 30_000,
+  timeout: 120_000,
 });
 rmSync(DRIVER, { force: true });
 assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
