@@ -163,6 +163,24 @@ export const Trail = {
       outputDigest,
     });
   },
+  qualityBlock(
+    feature: string,
+    gate: string,
+    reason: string,
+    changedFiles: string[],
+    repairAttempts: number,
+    nextAction: string,
+  ): void {
+    logTrail({
+      kind: "quality_block",
+      feature,
+      gate,
+      reason,
+      changedFiles,
+      repairAttempts,
+      nextAction,
+    });
+  },
   processHygiene(
     action: "timeout_kill" | "long_lived_command_detected" | "tool_echo_synthesis",
     pid: number | null,

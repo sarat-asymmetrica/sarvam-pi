@@ -127,10 +127,19 @@ step("Run Builder on intentionally bad HTML request", () => {
   const feature = featureFile.features.find((f) => f.id === "repair-html");
   const htmlGates = records.filter((record) => record.kind === "html_static_gate");
   if (htmlGates.length === 0) fail("expected html_static_gate records");
+  const qualityBlocks = records.filter((record) => record.kind === "quality_block");
+  if (feature?.state !== "MODEL_DONE") {
+    if (qualityBlocks.length === 0) fail("expected quality_block record for blocked feature");
+    const block = qualityBlocks.at(-1);
+    if (!block.gate || !block.reason || !block.nextAction) {
+      fail(`quality_block missing diagnostics: ${JSON.stringify(block)}`);
+    }
+  }
   return [
     `  repair attempts: ${repairs.length}`,
     `  builder session: ${builderSessions[0]}`,
     `  html gate statuses: ${htmlGates.map((g) => g.status).join(", ")}`,
+    qualityBlocks.length ? `  quality block: ${qualityBlocks.at(-1).gate}` : "  quality block: (none)",
     `  feature state: ${feature?.state ?? "(missing)"}`,
   ].join("\n");
 });

@@ -48,6 +48,16 @@ export interface RunTicketResult {
   mutationGate?: MutationGateResult;
   htmlStaticGate?: HtmlStaticGateResult;
   htmlBehaviorGate?: HtmlBehaviorGateResult;
+  qualityBlock?: QualityBlockSummary;
+}
+
+export interface QualityBlockSummary {
+  feature: string;
+  gate: string;
+  reason: string;
+  changedFiles: string[];
+  repairAttempts: number;
+  nextAction: string;
 }
 
 export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult> {
@@ -138,6 +148,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   let lastMutationGate: MutationGateResult | undefined;
   let lastHtmlStaticGate: HtmlStaticGateResult | undefined;
   let lastHtmlBehaviorGate: HtmlBehaviorGateResult | undefined;
+  let repairAttemptsSpent = 0;
   let currentBrief = brief;
 
   // Keep the original scoped baseline across repairs. A failed attempt can still
@@ -165,21 +176,35 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
     if (!dispatch.ok) {
       const scopeReason = scopeViolationFailureReport(dispatch, opts);
       if (scopeReason && attempt < maxRepairAttempts && opts.role === "builder") {
+        repairAttemptsSpent += 1;
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, scopeReason);
         currentBrief = repairBrief(brief, scopeReason, attempt + 1, attemptChangeSummary);
         continue;
       }
       const toolReason = unavailableToolFailureReport(dispatch);
       if (toolReason && attempt < maxRepairAttempts && opts.role === "builder") {
+        repairAttemptsSpent += 1;
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, toolReason);
         currentBrief = repairBrief(brief, toolReason, attempt + 1, attemptChangeSummary);
         continue;
       }
       const processReason = longLivedCommandFailureReport(dispatch);
       if (processReason && attempt < maxRepairAttempts && opts.role === "builder") {
+        repairAttemptsSpent += 1;
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, processReason);
         currentBrief = repairBrief(brief, processReason, attempt + 1, attemptChangeSummary);
         continue;
+      }
+      if (opts.proposedAdvance) {
+        const changedFiles = mutationSnapshot ? compareMutationSnapshot(mutationSnapshot).changedFiles : [];
+        const qualityBlock = qualityBlockFromDispatchFailure(
+          opts.feature.id,
+          dispatch,
+          repairAttemptsSpent,
+          changedFiles,
+        );
+        Trail.qualityBlock(qualityBlock.feature, qualityBlock.gate, qualityBlock.reason, qualityBlock.changedFiles, qualityBlock.repairAttempts, qualityBlock.nextAction);
+        return { dispatch, advanced: false, newState, qualityBlock };
       }
       return { dispatch, advanced, newState };
     }
@@ -207,11 +232,14 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         if (!mutationGate.ok) {
           const reason = mutationGateFailureReport(mutationGate);
           if (attempt < maxRepairAttempts && opts.role === "builder") {
+            repairAttemptsSpent += 1;
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
             currentBrief = repairBrief(brief, reason, attempt + 1, attemptChangeSummary);
             continue;
           }
-          return { dispatch, advanced: false, mutationGate };
+          const qualityBlock = qualityBlockFromGates(refreshed.id, repairAttemptsSpent, { mutationGate });
+          Trail.qualityBlock(qualityBlock.feature, qualityBlock.gate, qualityBlock.reason, qualityBlock.changedFiles, qualityBlock.repairAttempts, qualityBlock.nextAction);
+          return { dispatch, advanced: false, mutationGate, qualityBlock };
         }
       }
       let htmlStaticGate: HtmlStaticGateResult | undefined;
@@ -229,11 +257,14 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         if (!htmlStaticGate.ok) {
           const reason = htmlStaticGateFailureReport(htmlStaticGate);
           if (attempt < maxRepairAttempts && opts.role === "builder") {
+            repairAttemptsSpent += 1;
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
             currentBrief = repairBrief(brief, reason, attempt + 1, attemptChangeSummary);
             continue;
           }
-          return { dispatch, advanced: false, mutationGate, htmlStaticGate };
+          const qualityBlock = qualityBlockFromGates(refreshed.id, repairAttemptsSpent, { mutationGate, htmlStaticGate });
+          Trail.qualityBlock(qualityBlock.feature, qualityBlock.gate, qualityBlock.reason, qualityBlock.changedFiles, qualityBlock.repairAttempts, qualityBlock.nextAction);
+          return { dispatch, advanced: false, mutationGate, htmlStaticGate, qualityBlock };
         }
         const htmlBehaviorGate = runHtmlBehaviorGate(opts.cwd, refreshed.scopePath, spec);
         lastHtmlBehaviorGate = htmlBehaviorGate;
@@ -264,6 +295,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           });
           previousBehaviorFailureSnapshot = currentBehaviorFailureSnapshot;
           if (shouldRepair.ok) {
+            repairAttemptsSpent += 1;
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, reason);
             currentBrief = browserRepairBrief(brief, reason, attempt + 1, refreshed.scopePath, attemptChangeSummary);
             continue;
@@ -279,11 +311,14 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
               "Adaptive repair note: the scoped artifact changed since the previous browser-gate failure, so the harness is granting one extra convergence attempt.",
               `Repair budget is now ${repairBudget} of hard cap ${hardRepairBudget}.`,
             ].join("\n");
+            repairAttemptsSpent += 1;
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, adaptiveReason);
             currentBrief = browserRepairBrief(brief, adaptiveReason, attempt + 1, refreshed.scopePath, attemptChangeSummary);
             continue;
           }
-          return { dispatch, advanced: false, mutationGate, htmlStaticGate, htmlBehaviorGate };
+          const qualityBlock = qualityBlockFromGates(refreshed.id, repairAttemptsSpent, { mutationGate, htmlStaticGate, htmlBehaviorGate });
+          Trail.qualityBlock(qualityBlock.feature, qualityBlock.gate, qualityBlock.reason, qualityBlock.changedFiles, qualityBlock.repairAttempts, qualityBlock.nextAction);
+          return { dispatch, advanced: false, mutationGate, htmlStaticGate, htmlBehaviorGate, qualityBlock };
         }
       }
       let compileGate: CompileGateResult | undefined;
@@ -307,17 +342,28 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         if (!compileGate.ok) {
           const reason = compileGateFailureReport(compileGate);
           if (attempt < maxRepairAttempts && opts.role === "builder") {
+            repairAttemptsSpent += 1;
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
             currentBrief = repairBrief(brief, reason, attempt + 1, attemptChangeSummary);
             continue;
           }
-          return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
+          const qualityBlock = qualityBlockFromGates(refreshed.id, repairAttemptsSpent, { compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate });
+          Trail.qualityBlock(qualityBlock.feature, qualityBlock.gate, qualityBlock.reason, qualityBlock.changedFiles, qualityBlock.repairAttempts, qualityBlock.nextAction);
+          return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate, qualityBlock };
         }
       }
       const evidence = dispatchEvidenceForAdvance(dispatch, opts.proposedAdvance);
       if (!evidence.ok) {
         Trail.failed(opts.role, evidence.reason);
-        return { dispatch: { ...dispatch, ok: false, error: evidence.reason }, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
+        const qualityBlock = qualityBlockFromGates(refreshed.id, repairAttemptsSpent, {
+          compileGate,
+          mutationGate,
+          htmlStaticGate,
+          htmlBehaviorGate: lastHtmlBehaviorGate,
+          finalAnswerReason: evidence.reason,
+        });
+        Trail.qualityBlock(qualityBlock.feature, qualityBlock.gate, qualityBlock.reason, qualityBlock.changedFiles, qualityBlock.repairAttempts, qualityBlock.nextAction);
+        return { dispatch: { ...dispatch, ok: false, error: evidence.reason }, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate, qualityBlock };
       }
 
       const result = advanceFeature(refreshed, {
@@ -421,6 +467,134 @@ export function dispatchEvidenceForAdvance(
     };
   }
   return { ok: true, text: text.slice(0, 200) };
+}
+
+export function qualityBlockFromGates(
+  feature: string,
+  repairAttempts: number,
+  gates: {
+    compileGate?: CompileGateResult;
+    mutationGate?: MutationGateResult;
+    htmlStaticGate?: HtmlStaticGateResult;
+    htmlBehaviorGate?: HtmlBehaviorGateResult;
+    finalAnswerReason?: string;
+  },
+): QualityBlockSummary {
+  if (gates.finalAnswerReason) {
+    return {
+      feature,
+      gate: "final_answer",
+      reason: gates.finalAnswerReason,
+      changedFiles: gates.mutationGate?.changedFiles ?? [],
+      repairAttempts,
+      nextAction: "Ask the agent to summarize changed files and verification, or inspect the artifact before retrying.",
+    };
+  }
+  if (gates.htmlBehaviorGate && !gates.htmlBehaviorGate.ok) {
+    return {
+      feature,
+      gate: "html_behavior_gate",
+      reason: gates.htmlBehaviorGate.reason ?? "browser behavior gate failed",
+      changedFiles: gates.mutationGate?.changedFiles ?? [],
+      repairAttempts,
+      nextAction: "Open the HTML artifact, reproduce the browser assertion, and patch the event/state/render/persistence path.",
+    };
+  }
+  if (gates.htmlStaticGate && !gates.htmlStaticGate.ok) {
+    const firstIssue = gates.htmlStaticGate.issues[0];
+    return {
+      feature,
+      gate: "html_static_gate",
+      reason: firstIssue
+        ? `${firstIssue.file}: ${firstIssue.code}: ${firstIssue.message}`
+        : gates.htmlStaticGate.reason ?? "static HTML gate failed",
+      changedFiles: gates.mutationGate?.changedFiles ?? [],
+      repairAttempts,
+      nextAction: "Fix the named static HTML issue first, then rerun the builder dispatch.",
+    };
+  }
+  if (gates.compileGate && !gates.compileGate.ok) {
+    return {
+      feature,
+      gate: "compile_gate",
+      reason: gates.compileGate.reason ?? (gates.compileGate.stderr.trim().slice(0, 200) || "compile/import gate failed"),
+      changedFiles: gates.mutationGate?.changedFiles ?? [],
+      repairAttempts,
+      nextAction: "Run the compile command locally, fix the first compiler error, then rerun verification.",
+    };
+  }
+  if (gates.mutationGate && !gates.mutationGate.ok) {
+    return {
+      feature,
+      gate: "mutation_gate",
+      reason: gates.mutationGate.reason ?? "no scoped implementation mutation detected",
+      changedFiles: gates.mutationGate.changedFiles,
+      repairAttempts,
+      nextAction: "Create or edit an implementation artifact inside the feature scope before claiming completion.",
+    };
+  }
+  return {
+    feature,
+    gate: "unknown",
+    reason: "feature did not advance after dispatch",
+    changedFiles: gates.mutationGate?.changedFiles ?? [],
+    repairAttempts,
+    nextAction: "Inspect the latest trail entries and rerun with a narrower brief.",
+  };
+}
+
+export function qualityBlockFromDispatchFailure(
+  feature: string,
+  dispatch: DispatchResult,
+  repairAttempts: number,
+  changedFiles: string[],
+): QualityBlockSummary {
+  const text = `${dispatch.error ?? ""}\n${dispatch.output ?? ""}`;
+  const processReason = longLivedCommandFailureReport(dispatch);
+  if (processReason) {
+    return {
+      feature,
+      gate: "process_hygiene",
+      reason: firstLine(processReason),
+      changedFiles,
+      repairAttempts,
+      nextAction: "Retry with a narrower brief that avoids shell discovery; use read/edit/write tools instead of blocked commands.",
+    };
+  }
+  const toolReason = unavailableToolFailureReport(dispatch);
+  if (toolReason) {
+    return {
+      feature,
+      gate: "tool_name",
+      reason: firstLine(toolReason),
+      changedFiles,
+      repairAttempts,
+      nextAction: "Retry using only the exact tool names listed in the role capability prompt.",
+    };
+  }
+  const scopeReason = text.match(/Blocked (?:unsafe )?mutation path "([^"]+)"/i)?.[0];
+  if (scopeReason) {
+    return {
+      feature,
+      gate: "mutation_scope",
+      reason: scopeReason,
+      changedFiles,
+      repairAttempts,
+      nextAction: "Move the implementation back inside the feature scope or split outside-scope wiring into a later task.",
+    };
+  }
+  return {
+    feature,
+    gate: "dispatch_failure",
+    reason: dispatch.error ?? "subagent dispatch failed",
+    changedFiles,
+    repairAttempts,
+    nextAction: "Inspect the response and trail tail, then retry with a smaller task or stricter tool instruction.",
+  };
+}
+
+function firstLine(text: string): string {
+  return text.split(/\r?\n/).find((line) => line.trim())?.trim() ?? text.trim();
 }
 
 export function repairBrief(

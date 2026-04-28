@@ -19,6 +19,7 @@ export type TrailKind =
   | "html_static_gate"
   | "repair_attempt"
   | "browser_check"
+  | "quality_block"
   | "process_hygiene"
   | "tool_call"
   | "user_prompt"
@@ -143,6 +144,16 @@ export interface TrailBrowserCheck extends TrailRecordBase {
   outputDigest: string;
 }
 
+export interface TrailQualityBlock extends TrailRecordBase {
+  kind: "quality_block";
+  feature: string;
+  gate: string;
+  reason: string;
+  changedFiles: string[];
+  repairAttempts: number;
+  nextAction: string;
+}
+
 export interface TrailProcessHygiene extends TrailRecordBase {
   kind: "process_hygiene";
   action: "timeout_kill" | "long_lived_command_detected" | "tool_echo_synthesis";
@@ -219,6 +230,7 @@ export type TrailRecord =
   | TrailHtmlStaticGate
   | TrailRepairAttempt
   | TrailBrowserCheck
+  | TrailQualityBlock
   | TrailProcessHygiene
   | TrailToolCall
   | TrailUserPrompt

@@ -169,6 +169,7 @@ step("Trail, gates, and token evidence", () => {
   const browserGates = records.filter((record) => record.kind === "browser_check" && record.task === "deterministic HTML behavior gate");
   const toolEchoSyntheses = records.filter((record) => record.kind === "process_hygiene" && record.action === "tool_echo_synthesis");
   const timeoutKills = records.filter((record) => record.kind === "process_hygiene" && record.action === "timeout_kill");
+  const qualityBlocks = records.filter((record) => record.kind === "quality_block");
   const totalTokens = summaries.reduce((sum, record) => sum + Number(record.tokens?.total ?? 0), 0);
 
   if (!summaries.length) fail("expected session_summary records");
@@ -176,6 +177,13 @@ step("Trail, gates, and token evidence", () => {
   if (!browserGates.length) fail("expected browser behavior gate records");
   if (timeoutKills.length) fail("unexpected timeout_kill in clean dogfood run");
   if (!qualityBlocked && feature?.state !== "MODEL_DONE") fail(`feature state ${feature?.state ?? "(missing)"}`);
+  if (qualityBlocked) {
+    if (!qualityBlocks.length) fail("expected quality_block record for blocked dogfood run");
+    const block = qualityBlocks.at(-1);
+    if (!block.gate || !block.reason || !block.nextAction) {
+      fail(`quality_block missing diagnostics: ${JSON.stringify(block)}`);
+    }
+  }
   if (feature?.state === "MODEL_DONE" && /^Called tool /i.test(String(feature.evidence ?? "").trim())) {
     fail("feature advanced with tool-call echo evidence");
   }
@@ -188,6 +196,7 @@ step("Trail, gates, and token evidence", () => {
     `  tool echo syntheses: ${toolEchoSyntheses.length}`,
     `  html gates: ${htmlGates.map((gate) => gate.status).join(", ")}`,
     `  browser gates: ${browserGates.map((gate) => gate.status).join(", ")}`,
+    qualityBlocks.length ? `  quality block: ${qualityBlocks.at(-1).gate}` : `  quality block: (none)`,
   ].join("\n");
 });
 

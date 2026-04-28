@@ -99,6 +99,18 @@ export async function runDispatch(
   } else if (advance) {
     console.log(kleur.yellow(`✗ Feature did NOT advance (dispatch ok=${r.dispatch.ok})`));
   }
+  if (!r.advanced && advance && r.qualityBlock) {
+    console.log(kleur.bold("\n=== Quality Block ==="));
+    console.log(`${kleur.yellow("Gate:")} ${r.qualityBlock.gate}`);
+    console.log(`${kleur.yellow("Reason:")} ${r.qualityBlock.reason}`);
+    console.log(`${kleur.yellow("Repairs:")} ${r.qualityBlock.repairAttempts}`);
+    console.log(
+      `${kleur.yellow("Changed files:")} ${
+        r.qualityBlock.changedFiles.length ? r.qualityBlock.changedFiles.join(", ") : "(none)"
+      }`,
+    );
+    console.log(`${kleur.yellow("Next:")} ${r.qualityBlock.nextAction}`);
+  }
   process.exit(r.dispatch.ok && (!advance || r.advanced) ? 0 : 1);
 }
 
