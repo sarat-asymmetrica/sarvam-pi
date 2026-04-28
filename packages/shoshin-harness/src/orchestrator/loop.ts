@@ -18,6 +18,7 @@ import { runCompileOrImportGate, CompileGateResult } from "./compile-gate.js";
 import {
   compareMutationSnapshot,
   MutationGateResult,
+  MutationSnapshot,
   snapshotScope,
 } from "./mutation-gate.js";
 import { runHtmlStaticGate, HtmlStaticGateResult } from "./html-static-gate.js";
@@ -27,6 +28,7 @@ import { Trail } from "../trail/writer.js";
 const ARCHITECT_PLAN_PROMPT_LIMIT = 6_000;
 const REPAIR_TICKET_PROMPT_LIMIT = 3_500;
 const REPAIR_REASON_PROMPT_LIMIT = 2_500;
+const REPAIR_CHANGE_SUMMARY_PROMPT_LIMIT = 1_500;
 
 export interface RunTicketOptions {
   role: RoleName;
@@ -62,7 +64,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 
   const sessionBase = `feature-${opts.feature.id}`;
   let brief = opts.brief;
-  let mutationSnapshot: ReturnType<typeof snapshotScope> | null = null;
+  let mutationSnapshot: MutationSnapshot | null = null;
   const maxRepairAttempts = Math.max(0, opts.maxRepairAttempts ?? 2);
   let repairBudget = maxRepairAttempts;
   const hardRepairBudget = shouldMutationGate(opts) ? Math.max(repairBudget, 4) : repairBudget;
@@ -140,7 +142,8 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 
   // Keep the original scoped baseline across repairs. A failed attempt can still
   // create the valid artifact that a later synthesis/repair attempt reports.
-  let previousBehaviorFailureSnapshot: ReturnType<typeof snapshotScope> | null = null;
+  let previousBehaviorFailureSnapshot: MutationSnapshot | null = null;
+  let previousAttemptSnapshot: MutationSnapshot | null = mutationSnapshot;
   for (let attempt = 0; attempt <= repairBudget; attempt++) {
     dispatch = await dispatchSubagent({
       role: opts.role,
@@ -151,24 +154,29 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
       timeoutMs: opts.timeoutMs,
       sessionKey: `${sessionBase}-${opts.role}`,
     });
+    const attemptSnapshot = opts.role === "builder" ? snapshotScope(opts.cwd, opts.feature.scopePath) : null;
+    const attemptChangeSummary = attemptSnapshot
+      ? scopedAttemptChangeSummary(previousAttemptSnapshot, attemptSnapshot)
+      : null;
+    if (attemptSnapshot) previousAttemptSnapshot = attemptSnapshot;
 
     if (!dispatch.ok) {
       const scopeReason = scopeViolationFailureReport(dispatch, opts);
       if (scopeReason && attempt < maxRepairAttempts && opts.role === "builder") {
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, scopeReason);
-        currentBrief = repairBrief(brief, scopeReason, attempt + 1);
+        currentBrief = repairBrief(brief, scopeReason, attempt + 1, attemptChangeSummary);
         continue;
       }
       const toolReason = unavailableToolFailureReport(dispatch);
       if (toolReason && attempt < maxRepairAttempts && opts.role === "builder") {
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, toolReason);
-        currentBrief = repairBrief(brief, toolReason, attempt + 1);
+        currentBrief = repairBrief(brief, toolReason, attempt + 1, attemptChangeSummary);
         continue;
       }
       const processReason = longLivedCommandFailureReport(dispatch);
       if (processReason && attempt < maxRepairAttempts && opts.role === "builder") {
         Trail.repairAttempt(opts.feature.id, opts.role, attempt + 1, maxRepairAttempts, processReason);
-        currentBrief = repairBrief(brief, processReason, attempt + 1);
+        currentBrief = repairBrief(brief, processReason, attempt + 1, attemptChangeSummary);
         continue;
       }
       return { dispatch, advanced, newState };
@@ -198,7 +206,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           const reason = mutationGateFailureReport(mutationGate);
           if (attempt < maxRepairAttempts && opts.role === "builder") {
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
-            currentBrief = repairBrief(brief, reason, attempt + 1);
+            currentBrief = repairBrief(brief, reason, attempt + 1, attemptChangeSummary);
             continue;
           }
           return { dispatch, advanced: false, mutationGate };
@@ -220,7 +228,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           const reason = htmlStaticGateFailureReport(htmlStaticGate);
           if (attempt < maxRepairAttempts && opts.role === "builder") {
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
-            currentBrief = repairBrief(brief, reason, attempt + 1);
+            currentBrief = repairBrief(brief, reason, attempt + 1, attemptChangeSummary);
             continue;
           }
           return { dispatch, advanced: false, mutationGate, htmlStaticGate };
@@ -243,7 +251,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           previousBehaviorFailureSnapshot = currentBehaviorFailureSnapshot;
           if (attempt < repairBudget && opts.role === "builder") {
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, reason);
-            currentBrief = browserRepairBrief(brief, reason, attempt + 1, refreshed.scopePath);
+            currentBrief = browserRepairBrief(brief, reason, attempt + 1, refreshed.scopePath, attemptChangeSummary);
             continue;
           }
           if (opts.role === "builder" && behaviorProgress && repairBudget < hardRepairBudget) {
@@ -255,7 +263,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
               `Repair budget is now ${repairBudget} of hard cap ${hardRepairBudget}.`,
             ].join("\n");
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, adaptiveReason);
-            currentBrief = browserRepairBrief(brief, adaptiveReason, attempt + 1, refreshed.scopePath);
+            currentBrief = browserRepairBrief(brief, adaptiveReason, attempt + 1, refreshed.scopePath, attemptChangeSummary);
             continue;
           }
           return { dispatch, advanced: false, mutationGate, htmlStaticGate, htmlBehaviorGate };
@@ -283,7 +291,7 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           const reason = compileGateFailureReport(compileGate);
           if (attempt < maxRepairAttempts && opts.role === "builder") {
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, maxRepairAttempts, reason);
-            currentBrief = repairBrief(brief, reason, attempt + 1);
+            currentBrief = repairBrief(brief, reason, attempt + 1, attemptChangeSummary);
             continue;
           }
           return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
@@ -317,8 +325,8 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
 }
 
 function snapshotChanged(
-  before: ReturnType<typeof snapshotScope> | null,
-  after: ReturnType<typeof snapshotScope>,
+  before: MutationSnapshot | null,
+  after: MutationSnapshot,
 ): boolean {
   if (!before) return true;
   if (before.root !== after.root) return true;
@@ -335,7 +343,12 @@ function shouldMutationGate(opts: RunTicketOptions): boolean {
   return opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE";
 }
 
-export function repairBrief(originalBrief: string, reason: string, attempt: number): string {
+export function repairBrief(
+  originalBrief: string,
+  reason: string,
+  attempt: number,
+  attemptChangeSummary?: string | null,
+): string {
   return [
     compactRepairTicket(originalBrief),
     "",
@@ -348,6 +361,7 @@ export function repairBrief(originalBrief: string, reason: string, attempt: numb
     "",
     "Gate failure summary:",
     compactPromptText(reason, REPAIR_REASON_PROMPT_LIMIT),
+    repairChangeSection(attemptChangeSummary),
   ].join("\n");
 }
 
@@ -356,6 +370,7 @@ export function browserRepairBrief(
   reason: string,
   attempt: number,
   scopePath?: string,
+  attemptChangeSummary?: string | null,
 ): string {
   return [
     compactRepairTicket(originalBrief),
@@ -375,6 +390,16 @@ export function browserRepairBrief(
     "",
     "Gate failure summary:",
     compactPromptText(reason, REPAIR_REASON_PROMPT_LIMIT),
+    repairChangeSection(attemptChangeSummary),
+  ].join("\n");
+}
+
+function repairChangeSection(attemptChangeSummary?: string | null): string {
+  if (!attemptChangeSummary) return "";
+  return [
+    "",
+    "Scoped artifact changes from the previous attempt:",
+    compactPromptText(attemptChangeSummary, REPAIR_CHANGE_SUMMARY_PROMPT_LIMIT),
   ].join("\n");
 }
 
@@ -392,6 +417,55 @@ export function compactPromptText(text: string, limit: number): string {
   const headLength = Math.max(0, Math.ceil((limit - marker.length) * 0.6));
   const tailLength = Math.max(0, limit - marker.length - headLength);
   return `${normalized.slice(0, headLength).trimEnd()}${marker}${normalized.slice(-tailLength).trimStart()}`;
+}
+
+export function scopedAttemptChangeSummary(
+  before: MutationSnapshot | null,
+  after: MutationSnapshot,
+): string {
+  if (!before) {
+    const files = Object.keys(after.files).sort();
+    return files.length
+      ? `Baseline snapshot captured. Current scoped files: ${summarizeFiles(files)}`
+      : "Baseline snapshot captured. No scoped files exist yet.";
+  }
+
+  if (before.root !== after.root) {
+    return `Scope root changed from ${before.root} to ${after.root}. Current scoped files: ${summarizeFiles(Object.keys(after.files).sort())}`;
+  }
+
+  const added: string[] = [];
+  const modified: string[] = [];
+  const deleted: string[] = [];
+  for (const [file, fingerprint] of Object.entries(after.files)) {
+    if (!(file in before.files)) {
+      added.push(file);
+    } else if (before.files[file] !== fingerprint) {
+      modified.push(file);
+    }
+  }
+  for (const file of Object.keys(before.files)) {
+    if (!(file in after.files)) deleted.push(file);
+  }
+
+  const sections = [
+    fileDeltaLine("Added", added),
+    fileDeltaLine("Modified", modified),
+    fileDeltaLine("Deleted", deleted),
+  ].filter(Boolean);
+  return sections.length ? sections.join("\n") : "No scoped file changes were detected in the previous attempt.";
+}
+
+function fileDeltaLine(label: string, files: string[]): string {
+  if (!files.length) return "";
+  return `${label}: ${summarizeFiles(files.sort())}`;
+}
+
+function summarizeFiles(files: string[], limit = 12): string {
+  if (!files.length) return "none";
+  const visible = files.slice(0, limit);
+  const hidden = files.length - visible.length;
+  return hidden > 0 ? `${visible.join(", ")} (+${hidden} more)` : visible.join(", ");
 }
 
 function scopeViolationFailureReport(dispatch: DispatchResult, opts: RunTicketOptions): string | null {
