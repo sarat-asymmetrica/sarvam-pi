@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-28T06:43:00+05:30",
+  "purpose": "Progressively harder real tasks for validating the reliable coding agent loop.",
+  "promotionRules": [
+    "Run from a reset fixture.",
+    "Record relevant gates or an explicit skip reason.",
+    "Produce a plain shoshin report for success or blockage.",
+    "Avoid repeated high-token repairs without artifact progress."
+  ],
+  "rungs": [
+    {
+      "id": "L1",
+      "name": "Single-file utility page",
+      "status": "active",
+      "userRequest": "Make me a small offline page that stores and shows my entries.",
+      "artifactScope": "app/",
+      "expectedArtifacts": ["app/index.html"],
+      "primaryGates": ["mutation_gate", "html_static_gate", "browser_check"],
+      "smoke": "experiments/030-clean-spa-dogfood/smoke.mjs",
+      "successSignal": "MODEL_DONE with passed static and browser gates, or quality_block with nextAction."
+    },
+    {
+      "id": "L2",
+      "name": "Multi-action single-file SPA",
+      "status": "active",
+      "userRequest": "Make a polished planner with add, delete, totals, empty state, and persistence.",
+      "artifactScope": "app/",
+      "expectedArtifacts": ["app/index.html"],
+      "primaryGates": ["mutation_gate", "html_static_gate", "browser_check", "report"],
+      "smoke": "experiments/030-clean-spa-dogfood/smoke.mjs",
+      "successSignal": "Report lists artifact, gates, sessions, tokens, and no unresolved quality block."
+    },
+    {
+      "id": "L3",
+      "name": "Scoped library implementation",
+      "status": "active",
+      "userRequest": "Add the calculation or classification logic inside this package only.",
+      "artifactScope": "internal/",
+      "expectedArtifacts": ["scoped implementation source"],
+      "primaryGates": ["mutation_gate", "compile_gate", "scope"],
+      "smoke": "experiments/024-scope-aware-repair/smoke.mjs",
+      "successSignal": "MODEL_DONE only when implementation files change inside scope."
+    },
+    {
+      "id": "L4",
+      "name": "Existing-code bugfix",
+      "status": "planned",
+      "userRequest": "This existing app has a failing behavior; fix the smallest path.",
+      "artifactScope": "app/",
+      "expectedArtifacts": ["modified existing implementation"],
+      "primaryGates": ["browser_check", "repair_delta", "duplicate_failure_guard"],
+      "smoke": null,
+      "successSignal": "Same failing assertion does not repeat indefinitely; report names the changed path."
+    },
+    {
+      "id": "L5",
+      "name": "Multi-file vanilla app",
+      "status": "planned",
+      "userRequest": "Split the app into HTML, CSS, and JS while preserving behavior.",
+      "artifactScope": "app/",
+      "expectedArtifacts": ["app/index.html", "app/styles.css", "app/app.js"],
+      "primaryGates": ["mutation_gate", "html_static_gate", "browser_check", "report"],
+      "smoke": null,
+      "successSignal": "Browser behavior passes with multiple linked local files."
+    },
+    {
+      "id": "L6",
+      "name": "Small API service",
+      "status": "planned",
+      "userRequest": "Build a small local API with validation and tests.",
+      "artifactScope": "api/",
+      "expectedArtifacts": ["server module", "test file"],
+      "primaryGates": ["mutation_gate", "compile_gate", "test"],
+      "smoke": null,
+      "successSignal": "Compile/test gate passes without servers left running."
+    },
+    {
+      "id": "L7",
+      "name": "Fullstack persistence slice",
+      "status": "planned",
+      "userRequest": "Build a tiny UI plus local persistence/API flow.",
+      "artifactScope": "app/",
+      "expectedArtifacts": ["frontend files", "backend files"],
+      "primaryGates": ["browser_check", "compile_gate", "report", "quality_block"],
+      "smoke": null,
+      "successSignal": "Report explains both frontend and backend status."
+    },
+    {
+      "id": "L8",
+      "name": "Refactor with tests",
+      "status": "planned",
+      "userRequest": "Improve this code without changing behavior.",
+      "artifactScope": "src/",
+      "expectedArtifacts": ["modified implementation", "passing tests"],
+      "primaryGates": ["test", "mutation_gate", "report"],
+      "smoke": null,
+      "successSignal": "Tests pass and report describes changed implementation files."
+    }
+  ]
+}
