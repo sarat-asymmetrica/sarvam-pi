@@ -7,7 +7,7 @@
 //   - quorum mode for uncertain decisions
 //   - revoke / shrink-scope on observed misbehavior
 //   - capability_pause routing for never-minted ops
-import { dispatchSubagent, DispatchResult } from "./dispatch.js";
+import { dispatchSubagent, DispatchResult, isToolCallEcho, isWeakFinalAnswer } from "./dispatch.js";
 import { readSpec } from "../spec/store.js";
 import { getFeature, upsertFeature } from "../features/store.js";
 import { advanceFeature } from "../features/transitions.js";
@@ -297,9 +297,15 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
           return { dispatch, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
         }
       }
+      const evidence = dispatchEvidenceForAdvance(dispatch, opts.proposedAdvance);
+      if (!evidence.ok) {
+        Trail.failed(opts.role, evidence.reason);
+        return { dispatch: { ...dispatch, ok: false, error: evidence.reason }, advanced: false, compileGate, mutationGate, htmlStaticGate, htmlBehaviorGate: lastHtmlBehaviorGate };
+      }
+
       const result = advanceFeature(refreshed, {
         to: opts.proposedAdvance,
-        evidence: dispatch.output.slice(0, 200),
+        evidence: evidence.text,
         cwd: opts.cwd,
       });
       if (result.ok) {
@@ -341,6 +347,26 @@ function snapshotChanged(
 
 function shouldMutationGate(opts: RunTicketOptions): boolean {
   return opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE";
+}
+
+export function dispatchEvidenceForAdvance(
+  dispatch: DispatchResult,
+  proposedAdvance: FeatureState,
+): { ok: true; text: string } | { ok: false; reason: string } {
+  const text = dispatch.output.trim();
+  if (isToolCallEcho(text)) {
+    return {
+      ok: false,
+      reason: `${proposedAdvance} advancement blocked: final answer was a tool-call echo, not evidence`,
+    };
+  }
+  if (isWeakFinalAnswer(text)) {
+    return {
+      ok: false,
+      reason: `${proposedAdvance} advancement blocked: final answer was too thin to serve as evidence`,
+    };
+  }
+  return { ok: true, text: text.slice(0, 200) };
 }
 
 export function repairBrief(

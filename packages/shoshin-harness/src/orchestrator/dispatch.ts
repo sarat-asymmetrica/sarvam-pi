@@ -87,6 +87,8 @@ interface ParsedPiJsonOutput {
 const SARVAM_PI_ROOT = resolve(
   process.env.SARVAM_PI_ROOT ?? "C:/Projects/sarvam-pi",
 );
+const SYNTHESIS_ORIGINAL_BRIEF_LIMIT = 2_500;
+const SYNTHESIS_TOOL_ECHO_LIMIT = 800;
 
 function locatePiCli(): string {
   const candidate = join(SARVAM_PI_ROOT, "pi-mono", "packages", "coding-agent", "dist", "cli.js");
@@ -188,7 +190,9 @@ export async function dispatchSubagent(opts: DispatchOptions): Promise<DispatchR
     opts.synthesisOnly
       ? "- Tool use is closed for this follow-up. Produce a normal final answer from the existing session context."
       : "- Use tools only when needed, then synthesize a normal final answer.",
-    "- Once you have enough context, stop using tools and provide the final answer.",
+    "- A tool-call echo is not a final answer. Do not end with 'Called tool ...'.",
+    "- Final answer format: changed files (or files inspected), verification/result, and any remaining caveat.",
+    "- Once you have enough context, stop using tools and provide that final answer.",
     "",
     `=== Ticket ===`,
     opts.ticketBrief,
@@ -348,19 +352,40 @@ export function isToolCallEcho(output: string): boolean {
   return /^Called tool [A-Za-z0-9_-]+ with arguments [\s\S]+\.?$/i.test(text);
 }
 
-function synthesisBrief(originalBrief: string, toolEcho: string): string {
+export function isWeakFinalAnswer(output: string): boolean {
+  const text = output.trim();
+  if (!text) return true;
+  if (text.length < 24) return true;
+  if (/^(done|fixed|ok|okay|completed|success|successful|implemented|verified|passed)\.?$/i.test(text)) return true;
+  return false;
+}
+
+export function synthesisBrief(originalBrief: string, toolEcho: string): string {
   return [
     "The previous turn executed a tool but returned only a tool-call echo instead of a final answer.",
     "Do not call any tools in this follow-up.",
     "Read the existing session context and synthesize a normal final response.",
-    "Include changed files and verification if they are known from the previous turn.",
+    "Your final answer must not be a tool-call echo or a one-word status.",
+    "Use this exact structure:",
+    "Changed files: <paths, or none>",
+    "Verification: <command/check/gate result, or not run>",
+    "Notes: <remaining caveat, or none>",
     "",
     "Original ticket:",
-    originalBrief,
+    compactPromptText(originalBrief, SYNTHESIS_ORIGINAL_BRIEF_LIMIT),
     "",
     "Previous tool-call echo:",
-    toolEcho.slice(0, 2000),
+    compactPromptText(toolEcho, SYNTHESIS_TOOL_ECHO_LIMIT),
   ].join("\n");
+}
+
+export function compactPromptText(text: string, limit: number): string {
+  const normalized = text.trim();
+  if (normalized.length <= limit) return normalized;
+  const marker = `\n\n[...${normalized.length - limit} chars omitted...]\n\n`;
+  const headLength = Math.max(0, Math.ceil((limit - marker.length) * 0.6));
+  const tailLength = Math.max(0, limit - marker.length - headLength);
+  return `${normalized.slice(0, headLength).trimEnd()}${marker}${normalized.slice(-tailLength).trimStart()}`;
 }
 
 export async function dispatchProcessForTest(opts: ProcessDispatchOptions): Promise<DispatchResult> {

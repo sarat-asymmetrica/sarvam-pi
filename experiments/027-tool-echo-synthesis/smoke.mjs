@@ -14,7 +14,7 @@ const DRIVER = resolve(__dirname, "tool_echo_driver.ts");
 writeFileSync(
   DRIVER,
   [
-    'import { isToolCallEcho } from "../../packages/shoshin-harness/src/orchestrator/dispatch.js";',
+    'import { isToolCallEcho, isWeakFinalAnswer, synthesisBrief } from "../../packages/shoshin-harness/src/orchestrator/dispatch.js";',
     'const positives = [',
     '  "Called tool write with arguments {\\"path\\":\\"app/index.html\\"}.",',
     '  "Called tool bash with arguments {\\"command\\":\\"npm test\\"}.",',
@@ -31,6 +31,16 @@ writeFileSync(
     "for (const text of negatives) {",
     "  if (isToolCallEcho(text)) throw new Error(`expected non-echo: ${text}`);",
     "}",
+    'for (const text of ["Done.", "ok", "Implemented"]) {',
+    "  if (!isWeakFinalAnswer(text)) throw new Error(`expected weak answer: ${text}`);",
+    "}",
+    'for (const text of ["Changed files: app/index.html\\nVerification: browser gate passed"]) {',
+    "  if (isWeakFinalAnswer(text)) throw new Error(`expected strong answer: ${text}`);",
+    "}",
+    'const brief = synthesisBrief("Ticket head\\n" + "A".repeat(8000) + "\\nTicket tail", "Called tool write with arguments " + "B".repeat(3000));',
+    'if (brief.length > 3800) throw new Error(`synthesis brief too large: ${brief.length}`);',
+    'if (!brief.includes("chars omitted")) throw new Error(brief);',
+    'if (!brief.includes("final answer must")) throw new Error(brief);',
   ].join("\n"),
   "utf8",
 );
@@ -38,7 +48,7 @@ writeFileSync(
 const result = spawnSync(process.execPath, [TSX_BIN, DRIVER], {
   cwd: resolve(__dirname, "..", ".."),
   encoding: "utf8",
-  timeout: 30_000,
+  timeout: 120_000,
 });
 rmSync(DRIVER, { force: true });
 assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
