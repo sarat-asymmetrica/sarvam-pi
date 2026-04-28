@@ -143,6 +143,8 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
   // Keep the original scoped baseline across repairs. A failed attempt can still
   // create the valid artifact that a later synthesis/repair attempt reports.
   let previousBehaviorFailureSnapshot: MutationSnapshot | null = null;
+  let previousBehaviorFailureSignature: string | null = null;
+  let repeatedBehaviorFailureCount = 0;
   let previousAttemptSnapshot: MutationSnapshot | null = mutationSnapshot;
   for (let attempt = 0; attempt <= repairBudget; attempt++) {
     dispatch = await dispatchSubagent({
@@ -246,15 +248,30 @@ export async function runTicket(opts: RunTicketOptions): Promise<RunTicketResult
         );
         if (!htmlBehaviorGate.ok) {
           const reason = htmlBehaviorGateFailureReport(htmlBehaviorGate);
+          const behaviorFailureSignature = browserFailureSignature(htmlBehaviorGate);
+          repeatedBehaviorFailureCount = behaviorFailureSignature === previousBehaviorFailureSignature
+            ? repeatedBehaviorFailureCount + 1
+            : 1;
+          previousBehaviorFailureSignature = behaviorFailureSignature;
           const currentBehaviorFailureSnapshot = snapshotScope(opts.cwd, refreshed.scopePath);
           const behaviorProgress = snapshotChanged(previousBehaviorFailureSnapshot, currentBehaviorFailureSnapshot);
+          const shouldRepair = shouldContinueBrowserRepair({
+            attempt,
+            repairBudget,
+            behaviorProgress,
+            repeatedFailureCount: repeatedBehaviorFailureCount,
+            role: opts.role,
+          });
           previousBehaviorFailureSnapshot = currentBehaviorFailureSnapshot;
-          if (attempt < repairBudget && opts.role === "builder") {
+          if (shouldRepair.ok) {
             Trail.repairAttempt(refreshed.id, opts.role, attempt + 1, repairBudget, reason);
             currentBrief = browserRepairBrief(brief, reason, attempt + 1, refreshed.scopePath, attemptChangeSummary);
             continue;
           }
-          if (opts.role === "builder" && behaviorProgress && repairBudget < hardRepairBudget) {
+          if (shouldRepair.reason) {
+            Trail.failed(opts.role, shouldRepair.reason);
+          }
+          if (opts.role === "builder" && behaviorProgress && repeatedBehaviorFailureCount < 3 && repairBudget < hardRepairBudget) {
             repairBudget += 1;
             const adaptiveReason = [
               reason,
@@ -347,6 +364,43 @@ function snapshotChanged(
 
 function shouldMutationGate(opts: RunTicketOptions): boolean {
   return opts.role === "builder" && opts.proposedAdvance === "MODEL_DONE";
+}
+
+export function shouldContinueBrowserRepair(opts: {
+  attempt: number;
+  repairBudget: number;
+  behaviorProgress: boolean;
+  repeatedFailureCount?: number;
+  role: RoleName;
+}): { ok: true } | { ok: false; reason?: string } {
+  if (opts.role !== "builder") return { ok: false };
+  if (opts.attempt >= opts.repairBudget) return { ok: false };
+  if ((opts.repeatedFailureCount ?? 1) >= 3) {
+    return {
+      ok: false,
+      reason:
+        "browser repair stopped: same browser-gate failure repeated across repair attempts",
+    };
+  }
+  if (opts.attempt > 0 && !opts.behaviorProgress) {
+    return {
+      ok: false,
+      reason:
+        "browser repair stopped: repeated browser-gate failure without scoped artifact changes since the previous attempt",
+    };
+  }
+  return { ok: true };
+}
+
+export function browserFailureSignature(result: HtmlBehaviorGateResult): string {
+  const text = `${result.reason ?? ""}\n${result.output ?? ""}`;
+  const assertion = text.match(/AssertionError:\s*([^\r\n]+)/i)?.[1];
+  if (assertion) return `assertion:${assertion.trim().toLowerCase()}`;
+  const missingSelector = text.match(/Missing selector:\s*([^\r\n]+)/i)?.[1];
+  if (missingSelector) return `missing-selector:${missingSelector.trim().toLowerCase()}`;
+  const consoleError = text.match(/browser console errors:\s*([^\r\n]+)/i)?.[1];
+  if (consoleError) return `console:${consoleError.trim().toLowerCase()}`;
+  return text.replace(/\s+/g, " ").trim().slice(0, 240).toLowerCase();
 }
 
 export function dispatchEvidenceForAdvance(
